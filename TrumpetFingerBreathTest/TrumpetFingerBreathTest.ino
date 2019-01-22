@@ -20,7 +20,9 @@ BSD license, all text above must be included in any redistribution
 
 #ifndef _BV
 #define _BV(bit) (1 << (bit)) 
-#endif
+#endif\
+
+#define pressureSensorPin A0
 
 // You can have up to 4 on one i2c bus but one is enough for testing!
 Adafruit_MPR121 cap = Adafruit_MPR121();
@@ -67,8 +69,7 @@ void setup() {
 
 void loop() {
   // Get the currently touched pads
-  currtouched = cap.touched();
-  pressure = analogRead(A0) ;
+  
   
   for (uint8_t i=0; i<12; i++) {
     // it if *is* touched and *wasnt* touched before, alert!
@@ -118,6 +119,11 @@ void loop() {
   // reset our state
  lasttouched = currtouched; 
  lastPitch = pitch ;
+}
+
+void updateSensors () {
+  currtouched = cap.touched();
+  pressure = analogRead(pressureSensorPin) ;
 }
 
 void midiCommand(int command, int data1, int data2) {
