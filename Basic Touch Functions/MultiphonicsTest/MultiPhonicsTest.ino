@@ -72,14 +72,11 @@ void setup() {
   // Default address is 0x5A, if tied to 3.3V its 0x5B
   // If tied to SDA its 0x5C and if SCL then 0x5D
   if (!cap1.begin(0x5B)) {
-    Serial.println("MPR121 not found, check wiring?");
     while (1);
   }
   if (!cap2.begin(0x5A)) {
-    Serial.println("MPR121 not found, check wiring?");
     while (1);
   }
-  Serial.println("MPR121 found!");
 
   pitch[0] = transpositionPitch ;
   
@@ -287,4 +284,11 @@ void midiCommand(int command, int data1, int data2) {
   Serial.write(command);//send midi command byte
   Serial.write(data1);//send first data byte
   Serial.write(data2);//send second data byte
+
+  //comment out if using serial1 on mega only
+  //return ; 
+  
+  Serial1.write(command);//send midi command byte
+  Serial1.write(data1);//send first data byte
+  Serial1.write(data2);//send second data byte
 }
