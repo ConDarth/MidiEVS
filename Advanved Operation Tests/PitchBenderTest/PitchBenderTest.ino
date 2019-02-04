@@ -1,87 +1,79 @@
-/*********************************************************
-This is a library for the MPR121 12-channel Capacitive touch sensor
+#include <CapacitiveSensor.h>
 
-Designed specifically to work with the MPR121 Breakout in the Adafruit shop 
-  ----> https://www.adafruit.com/products/
+/*
+ * CapitiveSense Library Demo Sketch
+ * Paul Badger 2008
+ * Uses a high value resistor e.g. 10M between send pin and receive pin
+ * Resistor effects sensitivity, experiment with values, 50K - 50M. Larger resistor values yield larger sensor values.
+ * Receive pin is the sensor pin - try different amounts of foil/metal on this pin
+ */
 
-These sensors use I2C communicate, at least 2 pins are required 
-to interface
 
-Adafruit invests time and resources providing this open source code, 
-please support Adafruit and open-source hardware by purchasing 
-products from Adafruit!
+CapacitiveSensor   pBUpSensor = CapacitiveSensor(2, 3);        // 10M resistor between pins 4 & 2, pin 2 is sensor pin, add a wire and or foil if desired
+CapacitiveSensor   pBDownSensor = CapacitiveSensor(2, 4);        // 10M resistor between pins 4 & 2, pin 2 is sensor pin, add a wire and or foil if desired
+ 
+int pBUp = 0 ;
+int pBDown = 0 ;
+int pitchBend = 8192 ;
+boolean pBToggle = false ;
 
-Written by Limor Fried/Ladyada for Adafruit Industries.  
-BSD license, all text above must be included in any redistribution
-**********************************************************/
+int pBUpTHR = 1000 ;
+int pBUpMAX = 4000 ;
+int pBDownTHR = 1000 ;
+int pBDownMAX = 4000 ;
 
-#include <Wire.h>
-#include "Adafruit_MPR121.h"
-
-#ifndef _BV
-#define _BV(bit) (1 << (bit)) 
-#endif
-
-// You can have up to 4 on one i2c bus but one is enough for testing!
-Adafruit_MPR121 cap = Adafruit_MPR121();
-
-// Keeps track of the last pins touched
-// so we know when buttons are 'released'
-uint16_t lasttouched = 0;
-uint16_t currtouched = 0;
-
-void setup() {
-  Serial.begin(9600);
-
-  while (!Serial) { // needed to keep leonardo/micro from starting too fast!
-    delay(10);
-  }
-  
-  Serial.println("Adafruit MPR121 Capacitive Touch sensor test"); 
-  
-  // Default address is 0x5A, if tied to 3.3V its 0x5B
-  // If tied to SDA its 0x5C and if SCL then 0x5D
-  if (!cap.begin(0x5A)) {
-    Serial.println("MPR121 not found, check wiring?");
-    while (1);
-  }
-  Serial.println("MPR121 found!");
+void setup()                    
+{
+   Serial.begin(9600);
+   midiCommand2(144, 60, 127) ;
 }
 
-void loop() {
-  // Get the currently touched pads
-  currtouched = cap.touched();
-  
-  for (uint8_t i=0; i<12; i++) {
-    // it if *is* touched and *wasnt* touched before, alert!
-    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
-      Serial.print(i); Serial.println(" touched");
+void loop()                    
+{
+    long start = millis();
+    long total1 =  pBUpSensor.capacitiveSensor(30);
+    long total2 = pBDownSensor.capacitiveSensor(30);
+    
+    if (total1>pBUpTHR || total2>pBDownTHR) {
+      if (!pBToggle) {
+        pBToggle = true ;
+      }
+      
+      pBUp = map(total1, pBUpTHR, pBUpMAX, 0, 8192) ;
+      pBUp = rangeClip(pBUp, 0, 8192) ;
+    
+      pBDown = map(total2, pBDownTHR, pBDownMAX, 0, 8192) ;
+      pBDown = rangeClip(pBDown, 0, 8192) ;
+      
+      
+      pitchBend = 8192 + pBUp - pBDown ;
+      pitchBend = rangeClip(pitchBend, 0, 16383) ;
+      
+      midiCommand2(224, pitchBend&127, pitchBend>>7) ;
+    } else if (pBToggle) {
+      pBToggle = false ;
+      pitchBend = 8192 ;
+      midiCommand2(224, pitchBend&127, pitchBend>>7) ;
     }
-    // if it *was* touched and now *isnt*, alert!
-    if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
-      Serial.print(i); Serial.println(" released");
-    }
-  }
+    
 
-  // reset our state
-  lasttouched = currtouched;
+}
 
-  // comment out this line for detailed data from the sensor!
-  //return;
-  
-  // debugging info, what
-  Serial.print("\t\t\t\t\t\t\t\t\t\t\t\t\t 0x"); Serial.println(cap.touched(), HEX);
-  Serial.print("Filt: ");
-  for (uint8_t i=0; i<12; i++) {
-    Serial.print(cap.filteredData(i)); Serial.print("\t");
+int rangeClip(int number, int minimum, int maximum) {
+  if (number >= maximum) {
+    number = maximum ;
+  } else if (number <= minimum) {
+    number = minimum ;
   }
-  Serial.println();
-  Serial.print("Base: ");
-  for (uint8_t i=0; i<12; i++) {
-    Serial.print(cap.baselineData(i)); Serial.print("\t");
-  }
-  Serial.println();
-  
-  // put a delay so it isn't overwhelming
-  delay(100);
+  return number ;
+}
+
+void midiCommand1(int command, int data1) {
+  Serial.write(command) ;
+  Serial.write(data1) ;
+}
+void midiCommand2(int command, int data1, int data2) {
+  Serial.write(command) ;
+  Serial.write(data1) ;
+  Serial.write(data2) ;
 }

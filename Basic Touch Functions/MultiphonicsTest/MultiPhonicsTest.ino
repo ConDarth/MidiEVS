@@ -64,10 +64,14 @@ unsigned long lastTime = 0 ;
 
 void setup() {
   Serial.begin(9600);
+  Serial1.begin(9600) ;
 
   while (!Serial) { // needed to keep leonardo/micro from starting too fast!
-    delay(10);
+    delay(10) ;
   } 
+  while (!Serial1) {
+    delay(10) ;
+  }
   
   // Default address is 0x5A, if tied to 3.3V its 0x5B
   // If tied to SDA its 0x5C and if SCL then 0x5D
@@ -281,9 +285,9 @@ void hitKeys() {
 }
 
 void midiCommand(int command, int data1, int data2) {
-  Serial.write(command);//send midi command byte
-  Serial.write(data1);//send first data byte
-  Serial.write(data2);//send second data byte
+  //Serial.write(command);//send midi command byte
+  //Serial.write(data1);//send first data byte
+  //Serial.write(data2);//send second data byte
 
   //comment out if using serial1 on mega only
   //return ; 
