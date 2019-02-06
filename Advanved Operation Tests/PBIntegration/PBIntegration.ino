@@ -224,7 +224,7 @@ void setChord() {
     if (pressedKey[i] && !chordSetToggle[i]) {
       
       chordSetToggle[i] = true ;
-      chordNum[i] = pitchNum - 1 ;
+      chordNum[i] = pitchNum  ;
       for (int j=0; j<chordNum[i]; j++) {
         chordPitch[i][j] = pitch[j] ;
       }
