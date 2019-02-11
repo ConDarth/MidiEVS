@@ -75,7 +75,7 @@ int pressureTHR = 580 ;
 int breathController = 0 ;
 boolean noteCondition = false ;
 
-unsigned long debounceTime = 75 ;
+unsigned long debounceTime = 40 ;
 unsigned long lastTime = 0 ;
 
 void setup() {
@@ -208,15 +208,15 @@ void getFingeringVal() {
   }
 }
 void getMPhonics() {
-  applyChord() ;
   
   if (pressedKey[4]) {
     addPitch() ;
     setChord() ;
-  }
-  if (pressedKey[5]) {
+  } else if (pressedKey[5]) {
     clearMPhonic() ;
     clearChord() ;
+  } else if (!pressedKey[4] && !pressedKey[5]) {
+    applyChord() ;
   }
 }
 void setChord() {
