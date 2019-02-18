@@ -1,3 +1,4 @@
+
 /*
 MIDI On/Off Messages
 By Amanda Ghassaei
@@ -17,17 +18,23 @@ https://www.instructables.com/id/Send-and-Receive-MIDI-with-Arduino/
  int noteON = 144;//144 = 10010000 in binary, note on command
  int noteOFF = 128;//128 = 10000000 in binary, note off command
 
+
+
 void setup() {
   //  Set MIDI baud rate:
   Serial.begin(9600);
+  Serial1.begin(31250) ;
+    pinMode(LED_BUILTIN, OUTPUT);
+
+  
+
 }
 
 void loop() {
-  for (int note=50;note<70;note++) {//from note 50 (D3) to note 69 (A4)
-    MIDImessage(noteON, note, velocity);//turn note on
-    delay(300);//hold note for 300ms
-    MIDImessage(noteOFF, note, velocity);//turn note off
-    delay(200);//wait 200ms until triggering next note
+  for (int note=24;note<36;note++) {//from note 50 (D3) to note 69 (A4)
+    MIDImessage1(144, note, 127) ;
+    delay(500);//hold note for 300ms
+    MIDImessage1(144, note, 0) ;
   }
 }
 
@@ -36,4 +43,10 @@ void MIDImessage(int command, int MIDInote, int MIDIvelocity) {
   Serial.write(command);//send note on or note off command 
   Serial.write(MIDInote);//send pitch data
   Serial.write(MIDIvelocity);//send velocity data
+  
+}
+void MIDImessage1(int command, int MIDInote, int MIDIvelocity) {
+  Serial1.write(command);//send note on or note off command 
+  Serial1.write(MIDInote);//send pitch data
+  Serial1.write(MIDIvelocity);//send velocity data
 }

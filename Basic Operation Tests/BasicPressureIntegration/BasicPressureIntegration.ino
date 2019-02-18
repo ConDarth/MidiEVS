@@ -21,12 +21,13 @@ BSD license, all text above must be included in any redistribution
 
 #define Y_COORDINATE_THR 30 //thresholds for x cooordinate on the joystick
 #define X_COORDINATE_THR 30 //threshold for y coordinate on the joystick
-#define VIBRATO_AVG_SAMPLE 30 //number of samples to compound for the vibrato joystick
+#define VIBRATO_AVG_SAMPLE 5 //number of samples to compound for the vibrato joystick
+#define MIDI_OUTPUT_SERIAL 0 //defines which midi output to use
 
 
 #ifndef _BV
 #define _BV(bit) (1 << (bit)) 
-#endif
+#endifs
 
 //define the npr121 sensors 
 Adafruit_MPR121 cap1 = Adafruit_MPR121();
@@ -61,6 +62,7 @@ int chordPitch[4][16] ; //array storing the pitches for each chord key
 boolean chordSetToggle[] = {0, 0, 0, 0} ; //toggle to not set chord more than once
 boolean chordClearToggle[] = {0, 0, 0, 0} ; //toggle to not clear chord more than once
 boolean chordOnToggle[] = {0, 0, 0, 0} ; //toggle to not play chord more than once
+boolean chordAddToggle = true ;
 int chordNum[] = {0, 0, 0, 0} ; //which chord to set/clear/activate
 int chordMode = 0 ;
                         //tone shifts from original pitch in preset chord last column is size of chord
@@ -108,19 +110,25 @@ long vibratoVal = 0 ; //cumulative vibrato val actually used
 boolean vibratoToggle = false ; //to set vibrato when necessary
 
 //depracated for now
-int pressure = 564 ;
-int pressureMAX = 1016 ;
-int pressureTHR = 580 ;
-int breathController = 0 ;
-boolean noteCondition = false ;
+int pressureSensorPin = A0 ;
+int pressureRaw = 0 ;
+int pressureOnTHR = 70 ;
+int pressureOffTHR = 50 ;
+int pressureMAX = 400 ;
+int pressureVal = 0 ;
 
 
-unsigned long debounceTime = 40 ; //time between pitch sampling
-unsigned long lastTime = 0 ; //keeps track of current time
+unsigned long pitchDebounceTime = 40 ; //time between pitch sampling
+unsigned long pitchLastTime = 0 ; //keeps track of current time
+unsigned long midiEffectDebounce = 5 ;
+unsigned long pressureLastTime = 0 ;
+
+boolean noteStateToggle = false ;
+int eviState = 0 ;
 
 void setup() {
   Serial.begin(9600); 
-  Serial1.begin(9600) ; //second serial port for midi and serial communication
+  Serial1.begin(31250) ; //second serial port for midi and serial communication
 
   while (!Serial) { // needed to keep leonardo/micro from starting too fast!
     delay(10) ;
@@ -148,23 +156,29 @@ void setup() {
 void loop() {
   //update values to all the sensors 
   updateSensors() ;
-    
-  if (millis() - lastTime > debounceTime) {
-    //make sure that the pitch is only set every so often 
+  getEVIState() ;
+
+  switch(eviState) {
+    case 0:
+    //if pressure isnt above thr do nothing yet
+    break;
+    case 1:
+    //set aftertouch when thr is reached
+
+    //update the midi values
     getPitchVal() ;
-
-    lastTime = millis() ;
-  }
-
-  //update the midi values
-  getMPhonics() ;
-  getVibrato() ;
-  getJoystickMode() ;
-  getPB() ; 
+    getMPhonics() ;
+    getVibrato() ;
+    getJoystickMode() ;
+    getPB() ; 
+    getPressure() ;
   
-
-  //update all midi values and send them out
-  updateNote() ; 
+    //update all midi values and send them out
+    updateNote() ; 
+    
+    break;  
+  }
+  
   
   // reset our state
   lasttouched1 = currtouched1 ;  
@@ -190,6 +204,9 @@ void updateSensors () {
 
   //update the joystick values
   updateVibrato() ;
+  
+  //updates the raw pressure sensor data
+  pressureRaw = analogRead(pressureSensorPin) ;
 
   if (digitalRead(joystickSelectPin) == HIGH) {
     joystickSelect = false ;
@@ -198,6 +215,19 @@ void updateSensors () {
     joystickSelect = true ;  
   }
 
+}
+void getEVIState() {
+  if (!noteStateToggle && (pressureRaw > pressureOnTHR)) {
+    eviState = 1 ;
+    midiCommand(144, 60, 127) ;
+    midiCommand(160, 60, pressureVal) ;
+    noteStateToggle = true ;
+  } else if (noteStateToggle && !(pressureRaw >= pressureOffTHR)) {
+    eviState = 0 ;
+    noteStateToggle = false ;
+    midiCommand(128, 60, 127) ;
+    pressureVal = 0 ;
+  }
 }
 void updateNote() {
   //get which notes to turn on, off, and what pb value
@@ -263,10 +293,14 @@ void noteOff(){
 
 void getPitchVal() {
   //assigns which note to play based on keys pressed
-  pitch[pitchNum] = transpositionPitch ;
-  getOctaveVal() ;
-  getFingeringVal() ;
-  
+  if (millis() - pitchLastTime > pitchDebounceTime) {
+    //make sure that the pitch is only set every so often 
+    pitch[pitchNum] = transpositionPitch ;
+    getOctaveVal() ;
+    getFingeringVal() ;
+
+    pitchLastTime = millis() ;
+  }  
 }
 
 void getOctaveVal() {
@@ -331,10 +365,10 @@ void getMPhonics() {
 void presetChordSet() {
   if (pressedKey[4]) {
     if (!chordPresetToggle) {
-      chordPresetBase = pitch[pitchNum] % 12 ;
+      chordPresetBase = pitch[pitchNum] ;
       pitchNum = 0 ;
       for (int i=0; i<chordPreset[chordPresetNum][4]; i++) {
-        pitch[pitchNum] = chordPresetBase + 36 + chordPreset[chordPresetNum][i] ;
+        pitch[pitchNum] = chordPresetBase + chordPreset[chordPresetNum][i] ;
         pitchNum ++ ;
       }
       chordPresetToggle = true ;
@@ -407,13 +441,20 @@ void clearChord() {
 }
 void addPitch() {
   //adds a pitch to the multiphonics
-  if (pitchNum==0) {
-    pitchNum ++ ;
-    pitch[pitchNum] = pitch[pitchNum - 1] ;
-  } else if (pitch[pitchNum] != pitch[(pitchNum-1)]) {
-    pitchNum ++ ;
-    pitch[pitchNum] = pitch[pitchNum - 1] ;
-
+  chordAddToggle = true ;
+  for (int i=0; i<4; i++) {
+    if (pressedKey[i]) {
+      chordAddToggle = false ;
+    }
+  }
+  if (chordAddToggle) {
+    if (pitchNum==0) {
+      pitchNum ++ ;
+      pitch[pitchNum] = pitch[pitchNum - 1] ;
+    } else if (pitch[pitchNum] != pitch[(pitchNum-1)]) {
+      pitchNum ++ ;
+      pitch[pitchNum] = pitch[pitchNum - 1] ;
+    }
   }
 }
 void clearMPhonic() {
@@ -510,6 +551,11 @@ void getJoystickMode() {
     break;
   }
   
+}
+void getPressure() {
+      pressureRaw = rangeClip(pressureRaw, pressureOnTHR, pressureMAX) ;
+      pressureVal = map(pressureRaw, pressureOnTHR, pressureMAX, 0, 127) ;
+    }
 }
 void getVibrato() {
   getCurrentVibrato() ;
@@ -617,12 +663,16 @@ int rangeClip(int number, int minimum, int maximum) {
   return number ;
 }
 void midiCommand(int command, int data1, int data2) {
-  Serial.write(command);//send midi command byte
-  Serial.write(data1);//send first data byte
-  Serial.write(data2);//send second data byte
-}
-void midiCommand1(int command, int data1, int data2) {  
-  Serial1.write(command);//send midi command byte
-  Serial1.write(data1);//send first data byte
-  Serial1.write(data2);//send second data byte
+  switch(MIDI_OUTPUT_SERIAL) {
+    case 0: 
+      Serial.write(command);//send midi command byte
+      Serial.write(data1);//send first data byte
+      Serial.write(data2);//send second data byte
+    break;
+    case 1:
+      Serial1.write(command);//send midi command byte
+      Serial1.write(data1);//send first data byte
+      Serial1.write(data2);//send second data byte
+    break;
+  } 
 }

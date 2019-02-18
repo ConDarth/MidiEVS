@@ -21,7 +21,8 @@ BSD license, all text above must be included in any redistribution
 
 #define Y_COORDINATE_THR 30 //thresholds for x cooordinate on the joystick
 #define X_COORDINATE_THR 30 //threshold for y coordinate on the joystick
-#define VIBRATO_AVG_SAMPLE 30 //number of samples to compound for the vibrato joystick
+#define VIBRATO_AVG_SAMPLE 5 //number of samples to compound for the vibrato joystick
+#define MIDI_OUTPUT_SERIAL 0 //defines which midi output to use
 
 
 #ifndef _BV
@@ -61,6 +62,7 @@ int chordPitch[4][16] ; //array storing the pitches for each chord key
 boolean chordSetToggle[] = {0, 0, 0, 0} ; //toggle to not set chord more than once
 boolean chordClearToggle[] = {0, 0, 0, 0} ; //toggle to not clear chord more than once
 boolean chordOnToggle[] = {0, 0, 0, 0} ; //toggle to not play chord more than once
+boolean chordAddToggle = true ;
 int chordNum[] = {0, 0, 0, 0} ; //which chord to set/clear/activate
 int chordMode = 0 ;
                         //tone shifts from original pitch in preset chord last column is size of chord
@@ -115,12 +117,12 @@ int breathController = 0 ;
 boolean noteCondition = false ;
 
 
-unsigned long debounceTime = 40 ; //time between pitch sampling
+unsigned long pitchDebounceTime = 40 ; //time between pitch sampling
 unsigned long lastTime = 0 ; //keeps track of current time
 
 void setup() {
   Serial.begin(9600); 
-  Serial1.begin(9600) ; //second serial port for midi and serial communication
+  Serial1.begin(31250) ; //second serial port for midi and serial communication
 
   while (!Serial) { // needed to keep leonardo/micro from starting too fast!
     delay(10) ;
@@ -149,7 +151,7 @@ void loop() {
   //update values to all the sensors 
   updateSensors() ;
     
-  if (millis() - lastTime > debounceTime) {
+  if (millis() - lastTime > pitchDebounceTime) {
     //make sure that the pitch is only set every so often 
     getPitchVal() ;
 
@@ -263,10 +265,14 @@ void noteOff(){
 
 void getPitchVal() {
   //assigns which note to play based on keys pressed
-  pitch[pitchNum] = transpositionPitch ;
-  getOctaveVal() ;
-  getFingeringVal() ;
-  
+  if (millis() - lastTime > pitchDebounceTime) {
+    //make sure that the pitch is only set every so often 
+    pitch[pitchNum] = transpositionPitch ;
+    getOctaveVal() ;
+    getFingeringVal() ;
+
+    lastTime = millis() ;
+  }  
 }
 
 void getOctaveVal() {
@@ -331,10 +337,10 @@ void getMPhonics() {
 void presetChordSet() {
   if (pressedKey[4]) {
     if (!chordPresetToggle) {
-      chordPresetBase = pitch[pitchNum] % 12 ;
+      chordPresetBase = pitch[pitchNum] ;
       pitchNum = 0 ;
       for (int i=0; i<chordPreset[chordPresetNum][4]; i++) {
-        pitch[pitchNum] = chordPresetBase + 36 + chordPreset[chordPresetNum][i] ;
+        pitch[pitchNum] = chordPresetBase + chordPreset[chordPresetNum][i] ;
         pitchNum ++ ;
       }
       chordPresetToggle = true ;
@@ -407,13 +413,20 @@ void clearChord() {
 }
 void addPitch() {
   //adds a pitch to the multiphonics
-  if (pitchNum==0) {
-    pitchNum ++ ;
-    pitch[pitchNum] = pitch[pitchNum - 1] ;
-  } else if (pitch[pitchNum] != pitch[(pitchNum-1)]) {
-    pitchNum ++ ;
-    pitch[pitchNum] = pitch[pitchNum - 1] ;
-
+  chordAddToggle = true ;
+  for (int i=0; i<4; i++) {
+    if (pressedKey[i]) {
+      chordAddToggle = false ;
+    }
+  }
+  if (chordAddToggle) {
+    if (pitchNum==0) {
+      pitchNum ++ ;
+      pitch[pitchNum] = pitch[pitchNum - 1] ;
+    } else if (pitch[pitchNum] != pitch[(pitchNum-1)]) {
+      pitchNum ++ ;
+      pitch[pitchNum] = pitch[pitchNum - 1] ;
+    }
   }
 }
 void clearMPhonic() {
@@ -617,12 +630,16 @@ int rangeClip(int number, int minimum, int maximum) {
   return number ;
 }
 void midiCommand(int command, int data1, int data2) {
-  Serial.write(command);//send midi command byte
-  Serial.write(data1);//send first data byte
-  Serial.write(data2);//send second data byte
-}
-void midiCommand1(int command, int data1, int data2) {  
-  Serial1.write(command);//send midi command byte
-  Serial1.write(data1);//send first data byte
-  Serial1.write(data2);//send second data byte
+  switch(MIDI_OUTPUT_SERIAL) {
+    case 0: 
+      Serial.write(command);//send midi command byte
+      Serial.write(data1);//send first data byte
+      Serial.write(data2);//send second data byte
+    break;
+    case 1:
+      Serial1.write(command);//send midi command byte
+      Serial1.write(data1);//send first data byte
+      Serial1.write(data2);//send second data byte
+    break;
+  } 
 }
