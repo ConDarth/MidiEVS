@@ -27,7 +27,7 @@ BSD license, all text above must be included in any redistribution
 
 #ifndef _BV
 #define _BV(bit) (1 << (bit)) 
-#endifs
+#endif
 
 //define the npr121 sensors 
 Adafruit_MPR121 cap1 = Adafruit_MPR121();
@@ -52,7 +52,9 @@ int octaveValue[] =   {0, 12, 24, 36, 48, 60, 72} ;  //which ovtave to be in, ad
 int transpositionPitch = 22 ; //starting pitch when no keys pressed
 
 int pitch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ; //array for storing which pitches should be played
+int pitchVelocity[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ; //velocity each note should be played at 
 boolean pitchState[128] ; //array of which pitch is currently on
+int pitchStateVelocity[128] ; //the velocity each pitch in the array should be at 
 int lastPitch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ; //array of which pitch was last on
 int pitchNum = 0 ; //which pitch in the array to set 
 int pitchStateNum = 0 ; //im not sure possibly depracated
@@ -111,6 +113,7 @@ boolean vibratoToggle = false ; //to set vibrato when necessary
 
 //depracated for now
 int pressureSensorPin = A0 ;
+int pressureOutputState = 0 ;
 int pressureRaw = 0 ;
 int pressureOnTHR = 70 ;
 int pressureOffTHR = 50 ;
@@ -120,7 +123,7 @@ int pressureVal = 0 ;
 
 unsigned long pitchDebounceTime = 40 ; //time between pitch sampling
 unsigned long pitchLastTime = 0 ; //keeps track of current time
-unsigned long midiEffectDebounce = 5 ;
+unsigned long pressureDebounce = 5 ;
 unsigned long pressureLastTime = 0 ;
 
 boolean noteStateToggle = false ;
@@ -160,13 +163,11 @@ void loop() {
 
   switch(eviState) {
     case 0:
-    //if pressure isnt above thr do nothing yet
+    //if pressure isnt above THR do nothing yet
     break;
     case 1:
-    //set aftertouch when thr is reached
-
-    //update the midi values
-    getPitchVal() ;
+    //set aftertouch when THR is reached
+    getPitchVal() ;    //update the midi values
     getMPhonics() ;
     getVibrato() ;
     getJoystickMode() ;
@@ -219,21 +220,30 @@ void updateSensors () {
 void getEVIState() {
   if (!noteStateToggle && (pressureRaw > pressureOnTHR)) {
     eviState = 1 ;
-    midiCommand(144, 60, 127) ;
-    midiCommand(160, 60, pressureVal) ;
     noteStateToggle = true ;
   } else if (noteStateToggle && !(pressureRaw >= pressureOffTHR)) {
     eviState = 0 ;
     noteStateToggle = false ;
-    midiCommand(128, 60, 127) ;
-    pressureVal = 0 ;
+    //turn all notes off
+    allNotesOff() ;
+  }
+}
+void allNotesOff() {
+  for (int i=0; i<128; i++) {
+    if (pitchState[i]) {
+      midiCommand(144, i, 0) ;
+      pitchState[i] = false ;
+    }
   }
 }
 void updateNote() {
   //get which notes to turn on, off, and what pb value
+  //need to set pressure for all the notes 
   noteOn();
   noteOff();
+  updatePressure();
   updatePb() ;
+  
 }
 void updatePb() {
   
@@ -260,6 +270,20 @@ void updatePb() {
     pitchBendToggle = false ;
     pitchBend = 8192 ;
     midiCommand(224, pitchBend&127, pitchBend>>7) ;
+  }
+}
+void updatePressure() {
+  if ((millis() - pressureLastTime) > pressureDebounce) {
+    switch(pressureOutputState){
+      case 0:
+        //output pressure to aftertouch
+        midiCommand(176, 2, pressureVal>>7) ;
+      break;
+      case 1: 
+      //output pressure to something else and so on
+      break;
+    }
+    pressureLastTime = millis() ;
   }
 }
 void noteOn () {
@@ -368,7 +392,7 @@ void presetChordSet() {
       chordPresetBase = pitch[pitchNum] ;
       pitchNum = 0 ;
       for (int i=0; i<chordPreset[chordPresetNum][4]; i++) {
-        pitch[pitchNum] = chordPresetBase + chordPreset[chordPresetNum][i] ;
+        pitch[i] = chordPresetBase + chordPreset[chordPresetNum][i] ;
         pitchNum ++ ;
       }
       chordPresetToggle = true ;
@@ -553,9 +577,8 @@ void getJoystickMode() {
   
 }
 void getPressure() {
-      pressureRaw = rangeClip(pressureRaw, pressureOnTHR, pressureMAX) ;
-      pressureVal = map(pressureRaw, pressureOnTHR, pressureMAX, 0, 127) ;
-    }
+  pressureRaw = rangeClip(pressureRaw, pressureOnTHR, pressureMAX) ;
+  pressureVal = map(pressureRaw, pressureOnTHR, pressureMAX, 0, 16383) ;
 }
 void getVibrato() {
   getCurrentVibrato() ;

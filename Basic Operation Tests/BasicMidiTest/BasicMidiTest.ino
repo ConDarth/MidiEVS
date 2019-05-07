@@ -22,8 +22,7 @@ https://www.instructables.com/id/Send-and-Receive-MIDI-with-Arduino/
 
 void setup() {
   //  Set MIDI baud rate:
-  Serial.begin(9600);
-  Serial1.begin(31250) ;
+  Serial.begin(31250);
     pinMode(LED_BUILTIN, OUTPUT);
 
   
@@ -31,10 +30,13 @@ void setup() {
 }
 
 void loop() {
-  for (int note=24;note<36;note++) {//from note 50 (D3) to note 69 (A4)
-    MIDImessage1(144, note, 127) ;
+  for (int note=20;note<21;note++) {
+    MIDImessage(144, note, 127) ;
+    digitalWrite(LED_BUILTIN, HIGH) ;
     delay(500);//hold note for 300ms
-    MIDImessage1(144, note, 0) ;
+    MIDImessage(144, note, 0) ;
+    digitalWrite(LED_BUILTIN, LOW) ;
+    delay(500) ;
   }
 }
 
@@ -44,9 +46,4 @@ void MIDImessage(int command, int MIDInote, int MIDIvelocity) {
   Serial.write(MIDInote);//send pitch data
   Serial.write(MIDIvelocity);//send velocity data
   
-}
-void MIDImessage1(int command, int MIDInote, int MIDIvelocity) {
-  Serial1.write(command);//send note on or note off command 
-  Serial1.write(MIDInote);//send pitch data
-  Serial1.write(MIDIvelocity);//send velocity data
 }
