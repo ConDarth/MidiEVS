@@ -765,26 +765,14 @@ void fourMenuControl() {
         selectFunctionToggle = false ;
         harmonizerMenuCase = harmonizerCursor ;
         //set the harmonizer to correct value here rom fram
-        if(harmonizerCursor == 1) {
+        if(harmonizerCursor < 2) {
           for (int i=0; i<8; i++) {
             for (int j=0; j<4; j++) {
-              int address = harmonizerAddress + 4*i + j ;
+              int address = harmonizerAddress + 32*(harmonizerCursor-1) + 4*i + j ;
               harmonizerValues[i][j] = fram.read8(address) ;
             }
           }
-        } else if(harmonizerCursor == 2) {
-          for (int i=0; i<8; i++) {
-            for (int j=0; j<4; j++) {
-              int address = harmonizerAddress + 32 + 4*i + j ;
-              harmonizerValues[i][j] = fram.read8(address) ;
-            }
-          }
-        }
-          
-      }
-      if (cursorRight && cursorRightToggle) {
-        cursorRightToggle = false ;
-        harmonizerMenuCase = harmonizerCursor ;
+        }   
       }
     break;
     case 1:
@@ -1008,10 +996,35 @@ void harmonizerChordSelectControl(int8_t harmonizerNum) {
           }          
         break;
         case 2:
-          if (backFunction && backFunctionToggle) {
-            backFunctionToggle = false ;
-            harmonizerSelectMenuCase[harmonizerNum] = 0 ;
+
+          if (cursorLeft && cursorLeftToggle) {
+           cursorLeftToggle = false ;
+           harmonizerPitchNum[0] -- ;
           }
+          if (cursorRight && cursorRightToggle) {
+            cursorRightToggle = false ;
+            harmonizerPitchNum[0] ++ ;
+          }
+          harmonizerPitchNum[0] = constrain(harmonizerPitchNum[0], 0, 1) ;
+
+          if (selectFunction && selectFunctionToggle) {
+            selectFunctionToggle = false ;
+            harmonizerSelectMenuCase[harmonizerNum] = 0 ;
+
+            if (harmonizerPitchNum[0] == 0) {
+              
+              for(int j=0; j<8; j++) {
+               for(int k=0; k<4; k++) {
+                  int address1 = 192 + 32*harmonizerNum + 4*j + k ;
+                  harmonizerValues[j][k] = fram.read8(address1) ;
+                  
+                  int address2 = 256 + 32*harmonizerNum + 4*j + k ;
+                  fram.write8(address2, harmonizerValues[j][k]) ;
+                }
+              }
+            }
+          }
+          
         break; 
       }
     break;
@@ -1119,11 +1132,24 @@ void harmonizerChordSelectPrint(int8_t harmonizerNum) {
           display.print("Presets") ;
         break;
         case 2:
-          display.setCursor(4,4) ;
+          display.setCursor(46,19) ;
           display.setTextColor(WHITE) ;
           display.setTextSize(1) ;
           display.print("Reset") ;
           display.print("?") ;
+
+          display.setCursor(37, 37) ;
+          display.setTextColor(WHITE) ;
+          display.setTextSize(1) ;
+          display.print("YES") ;
+
+          display.setCursor(76, 37) ;
+          display.setTextColor(WHITE) ;
+          display.setTextSize(1) ;
+          display.print("NO") ;
+
+          display.drawRect(28+harmonizerPitchNum[0]*36, 34, 36, 13, WHITE) ; 
+          
         break;
       }
       
