@@ -60,45 +60,9 @@ int8_t harmonizerPitchLast = 0 ;
 boolean harmonizerPitchBlinker[4] = {1, 1, 1, 1} ;
 
 
-int8_t harmonizerValues[2][8][4] = { { {0, 4, 7, 0}, //major triad
-                                       {0, 3, 7, 0}, //minor triad
-                                       {0, 4, 7,10}, //dominent chord
-                                       {0, 3, 6, 0}, //diminished triad
-                                       {0, 7,14, 0}, //open chord
-                                       {0, 4, 8, 0}, //augmented triad
-                                       {4, 7,12, 0}, //first inversion major
-                                       {3, 7,12, 0} //first inversion minor
-                                      },
-                                     { {0, 2, 0, 0}, //major second
-                                       {0, 3, 0, 0}, //minor third
-                                       {0, 4, 0, 0}, //major third
-                                       {0, 5, 0, 0}, //perfect fourth
-                                       {0, 7, 0, 0}, //perfect fifth
-                                       {0, 9, 0, 0}, //major sixth
-                                       {0, 11, 0, 0}, //major seventh
-                                       {0, 12, 0, 0} //octave
-                                      }
-                                    } ;
+int8_t harmonizerValues[8][4] ;
+uint16_t static harmonizerAddress = 256 ;
 
-static int8_t harmonizerPresets[2][8][4] = { { {0, 4, 7, 0}, //major triad
-                                               {0, 3, 7, 0}, //minor triad
-                                               {0, 4, 7,10}, //dominent chord
-                                               {0, 3, 6, 0}, //diminished triad
-                                               {0, 7,14, 0}, //open chord
-                                               {0, 4, 8, 0}, //augmented triad
-                                               {4, 7,12, 0}, //first inversion major
-                                               {3, 7,12, 0} //first inversion minor
-                                             },
-                                             { {0, 2, 0, 0}, //major second
-                                               {0, 3, 0, 0}, //minor third
-                                               {0, 4, 0, 0}, //major third
-                                               {0, 5, 0, 0}, //perfect fourth
-                                               {0, 7, 0, 0}, //perfect fifth
-                                               {0, 9, 0, 0}, //major sixth
-                                               {0, 11, 0, 0}, //major seventh
-                                               {0, 12, 0, 0} //octave
-                                             }
-                                           } ;
 
 
 boolean selectFunction = false ;
@@ -800,6 +764,23 @@ void fourMenuControl() {
       if (selectFunction && selectFunctionToggle) {
         selectFunctionToggle = false ;
         harmonizerMenuCase = harmonizerCursor ;
+        //set the harmonizer to correct value here rom fram
+        if(harmonizerCursor == 1) {
+          for (int i=0; i<8; i++) {
+            for (int j=0; j<4; j++) {
+              int address = harmonizerAddress + 4*i + j ;
+              harmonizerValues[i][j] = fram.read8(address) ;
+            }
+          }
+        } else if(harmonizerCursor == 2) {
+          for (int i=0; i<8; i++) {
+            for (int j=0; j<4; j++) {
+              int address = harmonizerAddress + 32 + 4*i + j ;
+              harmonizerValues[i][j] = fram.read8(address) ;
+            }
+          }
+        }
+          
       }
       if (cursorRight && cursorRightToggle) {
         cursorRightToggle = false ;
@@ -1024,7 +1005,7 @@ void harmonizerChordSelectControl(int8_t harmonizerNum) {
           if (backFunction && backFunctionToggle) {
             backFunctionToggle = false ;
             harmonizerSelectMenuCase[harmonizerNum] = 0 ;
-          }
+          }          
         break;
         case 2:
           if (backFunction && backFunctionToggle) {
@@ -1190,7 +1171,7 @@ void harmonizerPitchSelectControl(int8_t harmonizerNum, int8_t chordNum, int8_t 
     if (selectFunction && selectFunctionToggle) {
       selectFunctionToggle = false ;
       harmonizerPitchSelect = true ;
-      harmonizerPitchLast = harmonizerValues[harmonizerNum][chordNum-1][pitchNum] ;
+      harmonizerPitchLast = harmonizerValues[chordNum-1][pitchNum] ;
     }
   } else if (harmonizerPitchSelect == true) {
     
@@ -1198,21 +1179,23 @@ void harmonizerPitchSelectControl(int8_t harmonizerNum, int8_t chordNum, int8_t 
       selectFunctionToggle = false ;
       harmonizerPitchSelect = false ;
       harmonizerPitchBlinker[pitchNum] = 1 ;
+      int address = harmonizerAddress + 32*harmonizerNum + 4*(chordNum-1) + pitchNum ;
+      fram.write8(address, harmonizerValues[chordNum-1][pitchNum]) ;
     }
     if (backFunction && backFunctionToggle) {
       backFunctionToggle = false ;
       harmonizerPitchSelect = false ;
       harmonizerPitchBlinker[pitchNum] = 1 ;
-      harmonizerValues[harmonizerNum][chordNum-1][pitchNum] = harmonizerPitchLast ;
+      harmonizerValues[chordNum-1][pitchNum] = harmonizerPitchLast ;
     }
     if (cursorUp && cursorUpToggle) {
-      harmonizerValues[harmonizerNum][chordNum-1][pitchNum] ++ ;
-      harmonizerValues[harmonizerNum][chordNum-1][pitchNum] = constrain(harmonizerValues[harmonizerNum][chordNum-1][pitchNum], -12, 12) ;
+      harmonizerValues[chordNum-1][pitchNum] ++ ;
+      harmonizerValues[chordNum-1][pitchNum] = constrain(harmonizerValues[chordNum-1][pitchNum], -12, 12) ;
       cursorUpToggle = false ;
     }
     if (cursorDown && cursorDownToggle) {
-      harmonizerValues[harmonizerNum][chordNum-1][pitchNum] -- ;
-      harmonizerValues[harmonizerNum][chordNum-1][pitchNum] = constrain(harmonizerValues[harmonizerNum][chordNum-1][pitchNum], -12, 12) ;
+      harmonizerValues[chordNum-1][pitchNum] -- ;
+      harmonizerValues[chordNum-1][pitchNum] = constrain(harmonizerValues[chordNum-1][pitchNum], -12, 12) ;
       cursorDownToggle = false ;
     }
     
@@ -1245,10 +1228,10 @@ void harmonizerPitchSelectPrint(int8_t harmonizerNum, int8_t chordNum, int8_t pi
   display.print("Pitch") ;
   if (harmonizerPitchBlinker[0] == 1) {
     display.print(" ") ;
-    if (harmonizerValues[harmonizerNum][chordNum-1][0] >= 0) {
+    if (harmonizerValues[chordNum-1][0] >= 0) {
      display.print("+") ;
    } 
-   display.print(harmonizerValues[harmonizerNum][chordNum-1][0]) ;
+   display.print(harmonizerValues[chordNum-1][0]) ;
   }
   
 
@@ -1258,10 +1241,10 @@ void harmonizerPitchSelectPrint(int8_t harmonizerNum, int8_t chordNum, int8_t pi
   display.print("Pitch") ;
   if (harmonizerPitchBlinker[1] == 1) {
     display.print(" ") ;
-    if (harmonizerValues[harmonizerNum][chordNum-1][1] >= 0) {
+    if (harmonizerValues[chordNum-1][1] >= 0) {
      display.print("+") ;
    } 
-   display.print(harmonizerValues[harmonizerNum][chordNum-1][1]) ;
+   display.print(harmonizerValues[chordNum-1][1]) ;
   }
 
   display.setCursor(4,50) ;
@@ -1270,10 +1253,10 @@ void harmonizerPitchSelectPrint(int8_t harmonizerNum, int8_t chordNum, int8_t pi
   display.print("Pitch") ;
   if (harmonizerPitchBlinker[2] == 1) {
     display.print(" ") ;
-    if (harmonizerValues[harmonizerNum][chordNum-1][2] >= 0) {
+    if (harmonizerValues[chordNum-1][2] >= 0) {
      display.print("+") ;
    } 
-   display.print(harmonizerValues[harmonizerNum][chordNum-1][2]) ;
+   display.print(harmonizerValues[chordNum-1][2]) ;
   }
 
   display.setCursor(68,50) ;
@@ -1282,10 +1265,10 @@ void harmonizerPitchSelectPrint(int8_t harmonizerNum, int8_t chordNum, int8_t pi
   display.print("Pitch") ;
   if (harmonizerPitchBlinker[3] == 1) {
     display.print(" ") ;
-    if (harmonizerValues[harmonizerNum][chordNum-1][3] >= 0) {
+    if (harmonizerValues[chordNum-1][3] >= 0) {
      display.print("+") ;
    } 
-   display.print(harmonizerValues[harmonizerNum][chordNum-1][3]) ;
+   display.print(harmonizerValues[chordNum-1][3]) ;
   }
 
   display.drawRect(pitchNumX*64, 22+(pitchNumY*24), 64, 15, WHITE) ;
