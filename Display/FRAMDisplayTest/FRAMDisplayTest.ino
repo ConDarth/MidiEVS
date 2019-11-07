@@ -53,6 +53,8 @@ int8_t harmonizerSelectCursorMAX[2] = {2, 5} ;
 int8_t harmonizerSelectMenuPos[2] = {1, 1} ;
 int8_t harmonizerSelectMenuCase[2] = {0, 0} ;
 int8_t harmonizerChordMenuCase = 0 ;
+int8_t harmonizerChordPresetCase = 0 ;
+int8_t harmonizerChordPresetMenuPos = 0 ;
 int8_t harmonizerChordNum = 1 ;
 int8_t harmonizerPitchNum[2] = {0, 0} ;
 boolean harmonizerPitchSelect = 0 ;
@@ -990,10 +992,73 @@ void harmonizerChordSelectControl(int8_t harmonizerNum) {
           harmonizerPitchSelectControl(harmonizerNum, harmonizerChordNum, harmonizerPitchNum[0], harmonizerPitchNum[1], harmonizerPitchSelect ) ; 
         break; 
         case 1:
-          if (backFunction && backFunctionToggle) {
-            backFunctionToggle = false ;
-            harmonizerSelectMenuCase[harmonizerNum] = 0 ;
-          }          
+          if (harmonizerChordPresetCase == 0) {
+            if (backFunction && backFunctionToggle) {
+              backFunctionToggle = false ;
+              harmonizerSelectMenuCase[harmonizerNum] = 0 ;
+            }   
+            if (cursorUp && cursorUpToggle) {
+              harmonizerPitchNum[1] -- ;
+              cursorUpToggle = false ;
+            }
+            if (cursorDown && cursorDownToggle) {
+              harmonizerPitchNum[1] ++ ;
+              cursorDownToggle = false ;
+            }
+            if (harmonizerPitchNum[1] > 5) {
+              harmonizerPitchNum[1] = 0 ;
+            }
+            if (harmonizerPitchNum[1] < 0) {
+              harmonizerPitchNum[1] = 5 ;
+            }
+            while (harmonizerPitchNum[1] > harmonizerChordPresetMenuPos + 2) {
+              harmonizerChordPresetMenuPos ++ ;
+            }
+            while (harmonizerPitchNum[1] < harmonizerChordPresetMenuPos) {
+              harmonizerChordPresetMenuPos -- ;
+            }
+
+
+            
+            if (selectFunction && selectFunctionToggle) {
+              selectFunctionToggle = false ;
+              harmonizerChordPresetCase = 1 ;  
+            }
+            
+          } else if (harmonizerChordPresetCase == 1) {
+            if (cursorLeft && cursorLeftToggle) {
+              cursorLeftToggle = false ;
+              harmonizerPitchNum[0] -- ;
+            }
+            if (cursorRight && cursorRightToggle) {
+              cursorRightToggle = false ;
+              harmonizerPitchNum[0] ++ ;
+            }
+            harmonizerPitchNum[0] = constrain(harmonizerPitchNum[0], 0, 1) ;
+            
+            if (selectFunction && selectFunctionToggle) {
+              selectFunctionToggle = false ;
+              
+              if (harmonizerPitchNum[0] == 0) {
+                harmonizerSelectMenuCase[harmonizerNum] = 0 ;
+                
+                for(int j=0; j<8; j++) {
+                 for(int k=0; k<4; k++) {
+                    int address1 = 320 + 32*harmonizerPitchNum[1] + 4*j + k ;
+                    harmonizerValues[j][k] = fram.read8(address1) ;
+                  
+                    int address2 = 256 + 32*harmonizerNum + 4*j + k ;
+                    fram.write8(address2, harmonizerValues[j][k]) ;
+                  }
+                }
+              } else {
+                harmonizerChordPresetCase = 0 ;
+              }
+
+              
+            }
+          }
+                  
         break;
         case 2:
 
@@ -1126,10 +1191,89 @@ void harmonizerChordSelectPrint(int8_t harmonizerNum) {
           harmonizerPitchSelectPrint(harmonizerNum, harmonizerChordNum, harmonizerPitchNum[0], harmonizerPitchNum[1], harmonizerPitchSelect ) ;
         break;
         case 1:
+          if (harmonizerChordPresetCase == 0) {
           display.setCursor(4,4) ;
           display.setTextColor(WHITE) ;
           display.setTextSize(1) ;
-          display.print("Presets") ;
+          display.print("Preset") ;
+          display.print("s") ;
+
+          for (int8_t i=0; i<3; i++) {
+            switch(harmonizerChordPresetMenuPos + i) {
+              case 0:
+                display.setCursor(4, (20+16*i)) ;
+                display.setTextColor(WHITE) ;
+                display.setTextSize(1) ;
+                display.print("Preset") ;
+                display.print(" ") ;
+                display.print("1") ;
+              break;
+              case 1:
+                display.setCursor(4, (20+16*i)) ;
+                display.setTextColor(WHITE) ;
+                display.setTextSize(1) ;
+                display.print("Preset") ;
+                display.print(" ") ;
+                display.print("2") ;
+              break;
+              case 2:
+                display.setCursor(4, (20+16*i)) ;
+                display.setTextColor(WHITE) ;
+                display.setTextSize(1) ;
+                display.print("Preset") ;
+                display.print(" ") ;
+                display.print("3") ;             
+              break;
+              case 3:
+                display.setCursor(4, (20+16*i)) ;
+                display.setTextColor(WHITE) ;
+                display.setTextSize(1) ;
+                display.print("Preset") ;
+                display.print(" ") ;
+                display.print("4") ;              
+              break;
+              case 4:
+                display.setCursor(4, (20+16*i)) ;
+                display.setTextColor(WHITE) ;
+                display.setTextSize(1) ;
+                display.print("Preset") ;
+                display.print(" ") ;
+                display.print("5") ;       
+              break;
+              case 5:
+                display.setCursor(4, (20+16*i)) ;
+                display.setTextColor(WHITE) ;
+                display.setTextSize(1) ;
+                display.print("Preset") ;
+                display.print(" ") ;
+                display.print("6") ;             
+              break; 
+            }
+          }
+          display.drawRect(1, 17+(harmonizerPitchNum[1]-harmonizerChordPresetMenuPos)*16, 64, 13, WHITE) ;
+          } else if (harmonizerChordPresetCase == 1) {
+            display.setCursor(25,19) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print("Set") ;
+            display.print(" ") ;
+            display.print("Preset") ;
+            display.print(" ") ;
+            display.print(harmonizerPitchNum[1]+1) ;
+            display.print("?") ;
+
+            display.setCursor(37, 37) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print("YES") ;
+
+            display.setCursor(76, 37) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print("NO") ;
+
+            display.drawRect(28+harmonizerPitchNum[0]*36, 34, 36, 13, WHITE) ; 
+          }
         break;
         case 2:
           display.setCursor(46,19) ;

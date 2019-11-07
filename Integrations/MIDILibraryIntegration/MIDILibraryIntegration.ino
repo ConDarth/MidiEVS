@@ -27,7 +27,7 @@ BSD license, all text above must be included in any redistribution
 #define Y_COORDINATE_THR 30 //thresholds for x cooordinate on the joystick
 #define X_COORDINATE_THR 30 //threshold for y coordinate on the joystick
 #define VIBRATO_AVG_SAMPLE 5 //number of samples to compound for the vibrato joystick
-#define MIDI_OUTPUT_SERIAL 1 //defines which midi output to use
+#define MIDI_OUTPUT_SERIAL 0 //defines which midi output to use (harlessMIDI-0 ; MIDIjack-1 ; SerialPort1-2)
 #define SELECTOR_DIAL_PIN A1
 #define BITE_SENSOR_PIN A2 
 
