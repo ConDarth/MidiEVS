@@ -191,9 +191,14 @@ int equalizer = 0 ;
 int lastEqualizer = 1 ;
 boolean equalizerToggle = true ;
 int modeSelectRaw = 0 ;
+int modeSelectTotal = 0 ;
+int modeSelectIndex = 0 ;
+int modeSelectSmooth = 0 ;
 int modeSelector = 0 ;
+int modeSelectTHR[2][4] = { {  0, 240, 490, 740}, 
+                          {260, 510, 760, 1010} } ;
 int lastModeSelector = 1 ;
-boolean selectButton[4] = {1, 0, 0, 0} ;
+boolean selectButton[4] = {0, 0, 1, 0} ;
 boolean selectButtonToggle = false ;
 boolean indicatorDisplayToggle = true ;
 
@@ -205,6 +210,10 @@ unsigned long pitchDebounceTime = 40 ; //time between pitch sampling
 unsigned long pitchLastTime = 0 ; //keeps track of current time
 unsigned long pressureDebounce = 5 ;
 unsigned long pressureLastTime = 0 ;
+unsigned long analogDebounceTime = 2 ;
+unsigned long analogLastTime = 0 ;
+unsigned long iDisplayDebounceTime = 10 ;
+unsigned long iDisplayLastTime = 0 ;
 
 unsigned long lastTime = 0 ;
 
@@ -299,20 +308,22 @@ void updateSensors () {
 
   //update the hit keys 
   hitKeys() ;
-
-  updateIndicatorDisplay() ;
-  
+   
   //update the individual cap sensors
   //pBUpRaw =  pBUpSensor.capacitiveSensor(5);
   //pBDownRaw = pBDownSensor.capacitiveSensor(5);
   getData() ;
 
   //update the joystick values
-  updateVibrato() ;
-  
-  //updates the raw pressure sensor data
-  pressureRaw = analogRead(pressureSensorPin) ;
+  //updateVibrato() ;
 
+  pressureRaw = analogRead(pressureSensorPin) ; // pressure must be updated more often because it turns the note on initially
+  biteSensorRaw = analogRead(BITE_SENSOR_PIN) ;
+  modeSelectRaw = analogRead(SELECTOR_DIAL_PIN) ;
+  modeSelectIndex ++ ;
+  modeSelectTotal += modeSelectRaw ;
+  
+  
   if (digitalRead(joystickSelectPin) == HIGH) {
     joystickSelect = false ;
 
@@ -320,7 +331,10 @@ void updateSensors () {
     joystickSelect = true ;  
   }
 
-  biteSensorRaw = analogRead(BITE_SENSOR_PIN) ;
+  if ((millis() - iDisplayLastTime) >= iDisplayDebounceTime) {
+    updateIndicatorDisplay() ;
+    iDisplayLastTime = millis() ;
+  }
   
 
 }
@@ -849,12 +863,27 @@ void updateVibrato() {
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void updateIndicatorDisplay() {
-  modeSelectRaw = analogRead(SELECTOR_DIAL_PIN) ;
-  modeSelector = map(modeSelectRaw, 0, 950, 3, 0) ;
+  modeSelectSmooth = modeSelectTotal/modeSelectIndex ;
+  modeSelectTotal = 0 ;
+  modeSelectIndex = 0 ;
+  if (modeSelectSmooth < modeSelectTHR[1][modeSelector]) {
+    if (modeSelector == 0) {
+      
+    } else {
+      modeSelector -= 1 ;
+    }
+  } else if (modeSelectSmooth > modeSelectTHR[2][modeSelector]) {
+    if (modeSelector == 3) {
+      
+    } else {
+      modeSelector += 1 ;
+    }
+  }
+  
   if (modeSelector != lastModeSelector) {
     indicatorDisplayToggle = true ;
   }
-  equalizer = map(pressureVal, 0, 16383, 0, 8) ;
+  equalizer = map(pressureVal, 0, 16383, 0, 8) ;  // need to be fixed so its smooth and from 1-8, with 0 being off
   if (equalizer != lastEqualizer) {
     if (equalizerToggle) {
       indicatorDisplayToggle = true ;
