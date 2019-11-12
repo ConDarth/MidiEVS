@@ -190,15 +190,17 @@ boolean portamentoToggle = false ;
 int equalizer = 0 ; 
 int lastEqualizer = 1 ;
 boolean equalizerToggle = true ;
+int equalizerTHR[2][9] = { {0,    1, 1950, 4000, 6050,  8100, 10150, 12200, 14250}, 
+                           {2, 2150, 4200, 6250, 8300, 10350, 12400, 14450, 16500} } ;
 int modeSelectRaw = 0 ;
 int modeSelectTotal = 0 ;
 int modeSelectIndex = 0 ;
 int modeSelectSmooth = 0 ;
 int modeSelector = 0 ;
-int modeSelectTHR[2][4] = { {  0, 240, 490, 740}, 
-                          {260, 510, 760, 1010} } ;
+int modeSelectTHR[2][4] = { {  0, 240, 490,  740}, 
+                            {260, 510, 760, 1010} } ;
 int lastModeSelector = 1 ;
-boolean selectButton[4] = {0, 0, 1, 0} ;
+boolean selectButton[4] = {1, 0, 1, 0} ;
 boolean selectButtonToggle = false ;
 boolean indicatorDisplayToggle = true ;
 
@@ -411,7 +413,7 @@ void updatePortamento() {
 /**********************************************************************************************************************************************/
 
 void updatePressure() {
-  if (pressureVal != pressureLast) {
+  if (pressureVal != pressureLast) { // need to allow for tolerances to ease mass transfer of data
     switch(pressureOutputState){
       case 0:
         //output pressure to continuous controller 2
@@ -422,8 +424,8 @@ void updatePressure() {
       //output pressure to something else and so on
       break;
     }
+    pressureLast = pressureVal ;
   }
-  pressureLast = pressureVal ;
 }
 
 /**********************************************************************************************************************************************/
@@ -866,13 +868,13 @@ void updateIndicatorDisplay() {
   modeSelectSmooth = modeSelectTotal/modeSelectIndex ;
   modeSelectTotal = 0 ;
   modeSelectIndex = 0 ;
-  if (modeSelectSmooth < modeSelectTHR[1][modeSelector]) {
+  if (modeSelectSmooth <= modeSelectTHR[0][modeSelector]) {
     if (modeSelector == 0) {
       
     } else {
       modeSelector -= 1 ;
     }
-  } else if (modeSelectSmooth > modeSelectTHR[2][modeSelector]) {
+  } else if (modeSelectSmooth >= modeSelectTHR[1][modeSelector]) {
     if (modeSelector == 3) {
       
     } else {
@@ -883,7 +885,19 @@ void updateIndicatorDisplay() {
   if (modeSelector != lastModeSelector) {
     indicatorDisplayToggle = true ;
   }
-  equalizer = map(pressureVal, 0, 16383, 0, 8) ;  // need to be fixed so its smooth and from 1-8, with 0 being off
+
+  if (pressureVal == 0) {
+    equalizer = 0 ;
+  } else if (pressureVal <= equalizerTHR[0][equalizer]) {
+    if (equalizer == 0) { } else {
+    equalizer -- ;      
+    }
+  } else if (pressureVal >= equalizerTHR[1][equalizer]) {
+    if (equalizer == 8) { } else {
+    equalizer ++ ;      
+    }
+  }
+    
   if (equalizer != lastEqualizer) {
     if (equalizerToggle) {
       indicatorDisplayToggle = true ;
@@ -902,34 +916,9 @@ void writeIndicatorDisplay() {
   if (indicatorDisplayToggle) {
     matrix.clear() ;
     
-    if (equalizerToggle) {
-      if (equalizer>7) {
-        matrix.fillRect(5, 0, 2, 5, LED_GREEN) ;
-        matrix.fillRect(5, 5, 2, 2, LED_YELLOW) ;
-        matrix.fillRect(5, 7, 2, (equalizer-7), LED_RED) ;
-      } else if (equalizer>5) {
-        matrix.fillRect(5, 0, 2, 5, LED_GREEN) ;
-        matrix.fillRect(5, 5, 2, (equalizer-5), LED_YELLOW) ;
-      } else if (equalizer>0) {
-        matrix.fillRect(5, 0, 2, equalizer, LED_GREEN) ;
-      } else {
-      }
-    } else if (!equalizerToggle) {
-      if (equalizer > 0) {
-        matrix.fillRect(5, 0, 2, 2, LED_GREEN) ;
-      } else {
-      }
-    }
+    writeEqualizerDisplay() ;
     
-    matrix.fillRect(2, 0, 2, 8, LED_RED) ;
-    
-    matrix.fillRect(0, (2*modeSelector), 2, 2, LED_RED) ;
-
-    for (int i=0; i<4; i++) {
-      if (selectButton[i]) {
-        matrix.fillRect(2, (2*i), 2, 2, LED_GREEN) ;
-      }
-    }
+    writeModeSelectorDisplay() ;
     
     matrix.writeDisplay() ;
 
@@ -938,6 +927,42 @@ void writeIndicatorDisplay() {
 
 }
 
+/**********************************************************************************************************************************************/
+
+void writeEqualizerDisplay() {
+  if (equalizerToggle) {
+    if (equalizer>7) {
+      matrix.fillRect(5, 0, 2, 5, LED_GREEN) ;
+      matrix.fillRect(5, 5, 2, 2, LED_YELLOW) ;
+      matrix.fillRect(5, 7, 2, (equalizer-7), LED_RED) ;
+    } else if (equalizer>5) {
+      matrix.fillRect(5, 0, 2, 5, LED_GREEN) ;
+      matrix.fillRect(5, 5, 2, (equalizer-5), LED_YELLOW) ;
+    } else if (equalizer>0) {
+      matrix.fillRect(5, 0, 2, equalizer, LED_GREEN) ;
+    } else {
+    }
+  } else if (!equalizerToggle) {
+    if (equalizer > 0) {
+      matrix.fillRect(5, 0, 2, 2, LED_GREEN) ;
+    } else {
+    }
+  }
+}
+
+/**********************************************************************************************************************************************/
+
+void writeModeSelectorDisplay() {
+  matrix.fillRect(2, 0, 2, 8, LED_RED) ;
+    
+  matrix.fillRect(0, (2*modeSelector), 2, 2, LED_RED) ;
+
+  for (int i=0; i<4; i++) {
+    if (selectButton[i]) {
+      matrix.fillRect(2, (2*i), 2, 2, LED_GREEN) ;
+    }
+  }
+}
 /*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ****************************************************************************************************************************************************************************************************
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
