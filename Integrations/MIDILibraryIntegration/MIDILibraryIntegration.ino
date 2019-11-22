@@ -85,9 +85,9 @@ boolean pitchStateCounter = false ; //possibly depracted
 
 /**********************************************************************************************************************************************/
 
-int currentVelocity = 127 ;
-int sustainVelocity = 50 ;
-int chordVelocity = 50;
+int currentVelocity = 100 ;
+int sustainVelocity = 90 ;
+int chordVelocity = 90;
 boolean velocityToggle = false ;
 
 /**********************************************************************************************************************************************/
@@ -98,7 +98,7 @@ boolean chordClearToggle[] = {0, 0, 0, 0} ; //toggle to not clear chord more tha
 boolean chordOnToggle[] = {0, 0, 0, 0} ; //toggle to not play chord more than once
 boolean chordAddToggle = true ;
 int chordNum[] = {0, 0, 0, 0} ; //which chord to set/clear/activate
-int chordMode = 0 ;
+int chordMode = 1 ;
 int chordPresetSize = 4 ;
                         //tone shifts from original pitch in preset chord last column is size of chord
 int chordPreset[8][5] = { {0, 4, 7, 0}, //major triad
@@ -169,9 +169,9 @@ boolean vibratoToggle = false ; //to set vibrato when necessary
 int pressureSensorPin = A0 ;
 int pressureOutputState = 0 ;
 int pressureRaw = 0 ;
-int pressureOnTHR = 200 ;
-int pressureOffTHR = 170 ;
-int pressureMAX = 560 ;
+int pressureOnTHR = 170 ;
+int pressureOffTHR = 150 ;
+int pressureMAX = 520 ;
 int pressureVal = 0 ;
 int pressureLast = 0 ;
 
@@ -197,8 +197,8 @@ int modeSelectTotal = 0 ;
 int modeSelectIndex = 0 ;
 int modeSelectSmooth = 0 ;
 int modeSelector = 0 ;
-int modeSelectTHR[2][4] = { {  0, 240, 490,  740}, 
-                            {260, 510, 760, 1010} } ;
+int modeSelectTHR[2][4] = { { 740, 510, 300,   0}, 
+                            {1010, 760, 530, 320} } ;
 int lastModeSelector = 1 ;
 boolean selectButton[4] = {1, 0, 1, 0} ;
 boolean selectButtonToggle = false ;
@@ -214,13 +214,16 @@ unsigned long pressureDebounce = 5 ;
 unsigned long pressureLastTime = 0 ;
 unsigned long analogDebounceTime = 2 ;
 unsigned long analogLastTime = 0 ;
-unsigned long iDisplayDebounceTime = 10 ;
+unsigned long iDisplayDebounceTime = 25 ;
 unsigned long iDisplayLastTime = 0 ;
 
 unsigned long lastTime = 0 ;
 
 boolean noteStateToggle = false ;
 int eviState = 0 ;
+
+//tester variables 
+unsigned long testTimer = 0 ;
 
 /*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ****************************************************************************************************************************************************************************************************
@@ -265,6 +268,8 @@ void loop() {
   getEVIState() ;
   getJoystickMode() ;
   
+  testTimer = micros() ;
+  
 
   
   switch(eviState) {
@@ -282,8 +287,9 @@ void loop() {
     
     break;  
   }
-
+  
   getMPhonics() ;
+  
   
   // reset our state
   lasttouched1 = currtouched1 ;  
@@ -310,12 +316,12 @@ void updateSensors () {
 
   //update the hit keys 
   hitKeys() ;
-   
+
   //update the individual cap sensors
   //pBUpRaw =  pBUpSensor.capacitiveSensor(5);
   //pBDownRaw = pBDownSensor.capacitiveSensor(5);
   getData() ;
-
+  
   //update the joystick values
   //updateVibrato() ;
 
@@ -332,13 +338,11 @@ void updateSensors () {
   } else {
     joystickSelect = true ;  
   }
-
+  
   if ((millis() - iDisplayLastTime) >= iDisplayDebounceTime) {
     updateIndicatorDisplay() ;
     iDisplayLastTime = millis() ;
   }
-  
-
 }
 
 /**********************************************************************************************************************************************/
@@ -352,6 +356,7 @@ void getEVIState() {
     noteStateToggle = false ;
     //turn all notes off
     allNotesOff() ;
+    getPressure() ;
   }
 }
 
@@ -869,16 +874,16 @@ void updateIndicatorDisplay() {
   modeSelectTotal = 0 ;
   modeSelectIndex = 0 ;
   if (modeSelectSmooth <= modeSelectTHR[0][modeSelector]) {
-    if (modeSelector == 0) {
-      
-    } else {
-      modeSelector -= 1 ;
-    }
-  } else if (modeSelectSmooth >= modeSelectTHR[1][modeSelector]) {
     if (modeSelector == 3) {
       
     } else {
       modeSelector += 1 ;
+    }
+  } else if (modeSelectSmooth >= modeSelectTHR[1][modeSelector]) {
+    if (modeSelector == 0) {
+      
+    } else {
+      modeSelector -= 1 ;
     }
   }
   
