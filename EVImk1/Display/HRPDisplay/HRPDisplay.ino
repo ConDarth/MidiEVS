@@ -48,7 +48,7 @@ Adafruit_FRAM_I2C fram     = Adafruit_FRAM_I2C();
 
                            // xpos ypos xmax ymax xscroll yscroll xsize ysize absval
 int8_t menuCursor[10][9] = { {   1,   1,   1,   6,      1,      1,    1,    4,     1},    //main menu select
-                             {   1,   1,   1,   4,      1,      1,    1,    4,     1},    //sensor adjust select
+                             {   1,   1,   1,   5,      1,      1,    1,    4,     1},    //sensor adjust select
                              {   1,   1,   1,   3,      1,      1,    1,    3,     1},    //multiphonics mode select
                              {   1,   1,   1,   4,      1,      1,    1,    3,     1},    //multiphonics adjust selector (harmonizer)
                              {   1,   1,   1,   4,      1,      1,    1,    3,     1},    //multiphonics adjust selector (rotator)
@@ -59,15 +59,13 @@ int8_t menuCursor[10][9] = { {   1,   1,   1,   6,      1,      1,    1,    4,  
                              {   1,   1,   2,   2,      1,      1,    2,    2,     1} } ; //chord pitch selection
                              
 
-int8_t oneMenuPosition = 1 ;
-int8_t oneCursorPosition = 1 ;
-int8_t oneCursorPositionMAX = 4 ;
 
 int8_t transpositionPosition = 0 ;
 int8_t transpositionMAX = 12 ;
 int8_t transpositionMIN = -12 ;
 int8_t transpositionMenuCase = 0 ;
 unsigned long blinkerLastTime = 0 ;
+int transpositionAddress = 0x40 ;
 
 int8_t threeMenuPosition = 0 ;
 int8_t threeMenuCase = 0 ;
@@ -137,6 +135,8 @@ Serial.begin(9600);
 
   pinMode(SELECT_BUTTON_PIN, INPUT_PULLUP) ;
   pinMode(BACK_BUTTON_PIN, INPUT_PULLUP) ;
+
+  transpositionPosition = fram.read8(transpositionAddress) ; //reads transposition from fram to initialize
 }
 
 void loop() {
@@ -299,6 +299,28 @@ void initialMenuPrint() {
           display.setTextColor(WHITE) ;
           display.setTextSize(1) ;   
           display.print("Transposition") ;
+
+          if (transpositionPosition > 9) {
+            display.setCursor(102, (4+16*i)) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print(transpositionPosition) ;
+          } else if (transpositionPosition > -1) {
+            display.setCursor(104, (4+16*i)) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print(transpositionPosition) ;
+          } else if (transpositionPosition > -10) {
+            display.setCursor(102, (4+16*i)) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print(transpositionPosition) ;
+          } else {
+            display.setCursor(100, (4+16*i)) ;
+            display.setTextColor(WHITE) ;
+            display.setTextSize(1) ;
+            display.print(transpositionPosition) ;
+          }
         break;
         case 3:
           display.setCursor(4,(4+16*i)) ;
@@ -449,15 +471,11 @@ void oneMenuPrint() {
           display.setCursor(4,(4+16*i)) ;
           display.setTextColor(WHITE) ;
           display.setTextSize(1) ;   
-          display.print("Pressure") ;    
+          display.print("Pressure") ;
+          display.print(" ") ; 
+          display.print("Sensor") ;      
           break; 
         case 2:
-          display.setCursor(4,(4+16*i)) ;
-          display.setTextColor(WHITE) ;
-          display.setTextSize(1) ;           
-          display.print("Portamento") ;   
-        break;
-        case 3:
           display.setCursor(4,(4+16*i)) ;
           display.setTextColor(WHITE) ;
           display.setTextSize(1) ;   
@@ -467,7 +485,7 @@ void oneMenuPrint() {
           display.print(" ") ;
           display.print("Up") ; 
         break;
-        case 4:
+        case 3:
           display.setCursor(4,(4+16*i)) ;
           display.setTextColor(WHITE) ;
           display.setTextSize(1) ;   
@@ -475,10 +493,23 @@ void oneMenuPrint() {
           display.print(" ") ;
           display.print("Bend") ;
           display.print(" ") ;
-          display.print("Down") ;  
+          display.print("Down") ; 
+        break;
+        case 4:
+          display.setCursor(4,(4+16*i)) ;
+          display.setTextColor(WHITE) ;
+          display.setTextSize(1) ;           
+          display.print("Bite") ; 
+          display.print(" ") ; 
+          display.print("Sensor") ;    
         break;
         case 5:
-          
+          display.setCursor(4,(4+16*i)) ;
+          display.setTextColor(WHITE) ;
+          display.setTextSize(1) ;   
+          display.print("Extra") ; 
+          display.print(" ") ;
+          display.print("Mod") ;
         break;
         case 6:
           
@@ -501,32 +532,19 @@ void oneMenuPrint() {
       display.setTextSize(1) ;   
       display.print("Pressure") ;
       
-      display.setCursor(4,22) ;
-      display.setTextColor(WHITE) ;
-      display.setTextSize(1) ;   
-      display.print("THR") ;    
-
-      display.setCursor(4,36) ;
-      display.setTextColor(WHITE) ;
-      display.setTextSize(1) ;   
-      display.print("SEN") ;  
-
-      display.setCursor(4,52) ;
-      display.setTextColor(WHITE) ;
-      display.setTextSize(1) ;   
-      display.print("MAX") ;
-
-      display.drawRect(26, 19, 96, 12, WHITE) ;
-      display.drawFastVLine(26, 35, 10, WHITE) ;
-      display.drawFastVLine(121, 35, 10, WHITE) ;
-      display.drawRect(26, 49, 96, 12, WHITE) ;
+      sensorAdjustPrint() ;
     break;
     case 2:
       display.setCursor(4,4) ;
       display.setTextColor(WHITE) ;
       display.setTextSize(1) ;   
-      display.print("Portamento") ;
-      
+      display.print("Pitch") ; 
+      display.print(" ") ;
+      display.print("Bend") ;
+      display.print(" ") ;
+      display.print("Up") ;  
+
+      sensorAdjustPrint() ;
     break;
     case 3:
       display.setCursor(4,4) ;
@@ -536,28 +554,74 @@ void oneMenuPrint() {
       display.print(" ") ;
       display.print("Bend") ;
       display.print(" ") ;
-      display.print("Up") ;
-      
+      display.print("Down") ;
+
+      sensorAdjustPrint() ;      
     break;
     case 4:
       display.setCursor(4,4) ;
       display.setTextColor(WHITE) ;
       display.setTextSize(1) ;   
-      display.print("Pitch") ; 
+      display.print("Bite") ; 
       display.print(" ") ;
-      display.print("Bend") ;
-      display.print(" ") ;
-      display.print("Down") ;
-      
+      display.print("Sensor") ;  
+
+      sensorAdjustPrint() ;
     break;
     case 5:
-      
+      display.setCursor(4,4) ;
+      display.setTextColor(WHITE) ;
+      display.setTextSize(1) ;   
+      display.print("Extra") ; 
+      display.print(" ") ;
+      display.print("Mod") ; 
+
+      sensorAdjustPrint() ;
     break;
     case 6:
       
     break;
   }
     
+}
+
+void sensorAdjustControl() {
+  
+}
+
+void sensorAdjustPrint() {
+  display.setCursor(4,21) ;
+  display.setTextColor(WHITE) ;
+  display.setTextSize(1) ;   
+  display.print("THR") ;    
+
+  display.setCursor(4,36) ;
+  display.setTextColor(WHITE) ;
+  display.setTextSize(1) ;   
+  display.print("SEN") ;  
+
+  display.setCursor(4,51) ;
+  display.setTextColor(WHITE) ;
+  display.setTextSize(1) ;   
+  display.print("MAX") ;
+
+  display.drawRect(26, 18, 96, 13, WHITE) ;
+  display.drawFastVLine(26, 22, 5, BLACK) ;
+  display.drawFastVLine(121, 22, 5, BLACK) ;
+  
+  display.drawFastVLine(46, 21, 7, WHITE) ; //variable for the THR setting
+  
+  display.drawFastVLine(26, 36, 7, WHITE) ;
+  display.drawFastVLine(121, 36, 7, WHITE) ;
+
+  display.drawFastVLine(36, 38, 3, WHITE) ; //variable for realtime sensor output  
+
+
+  display.drawRect(26, 48, 96, 13, WHITE) ;
+  display.drawFastVLine(26, 52, 5, BLACK) ;
+  display.drawFastVLine(121, 52, 5, BLACK) ;
+  
+  display.drawFastVLine(106, 51, 7, WHITE) ; // variable for 
 }
 
 void transpositionMenuControl() {
@@ -577,6 +641,7 @@ void transpositionMenuControl() {
   if (backFunction && backFunctionToggle) {
     backFunctionToggle = false ;
     menuCase = 0 ;
+    transpositionPosition = fram.read8(transpositionAddress) ;
   }
   if (cursorLeft && cursorLeftToggle) {
     cursorLeftToggle = false ;
@@ -586,6 +651,7 @@ void transpositionMenuControl() {
   if (selectFunction && selectFunctionToggle) {
     selectFunctionToggle = false ;
     menuCase = 0 ;
+    fram.write8(transpositionAddress, transpositionPosition) ;
   }
   if (cursorRight && cursorRightToggle) {
     cursorRightToggle = false ;
@@ -601,43 +667,79 @@ void transpositionMenuControl() {
     cursorDownToggle = false ;
   }
   transpositionPosition = constrain(transpositionPosition, transpositionMIN, transpositionMAX) ;
+
+  
 }
 void transpositionMenuPrint() {
+  for (int i=0; i<4; i++) {
+    switch(menuCursor[MAIN_MENU][YSCROLL]+i) {
+      case 1:
+        display.setCursor(4,(4+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Sensor") ;
+        display.print(" ") ;
+        display.print("Adjust") ;   
+      break;
+      case 2:
+        display.setCursor(4,(4+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Transposition") ;
+      break;
+      case 3:
+        display.setCursor(4,(4+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Multi-Phonics") ;
+        display.print(" ") ;
+        display.print("Mode") ;    
+      break;
+      case 4:
+        display.setCursor(4,(4+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Harmonizer") ;  
+      break;
+      case 5:
+        display.setCursor(4,(4+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Rotator") ;  
+      break;
+    }
+  }
 
-  display.setCursor(4,4) ;
-  display.setTextColor(WHITE) ;
-  display.setTextSize(1) ;   
-  display.print("Transposition") ;  
-     
   switch(transpositionMenuCase) {
     case 0:  
       if (transpositionPosition > 9) {
-        display.setCursor(40, 22) ;
+        display.setCursor(102, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
         display.setTextColor(WHITE) ;
-        display.setTextSize(4) ;
+        display.setTextSize(1) ;
         display.print(transpositionPosition) ;
       } else if (transpositionPosition > -1) {
-        display.setCursor(52, 22) ;
+        display.setCursor(104, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
         display.setTextColor(WHITE) ;
-        display.setTextSize(4) ;
+        display.setTextSize(1) ;
         display.print(transpositionPosition) ;
       } else if (transpositionPosition > -10) {
-        display.setCursor(40, 22) ;
+        display.setCursor(102, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
         display.setTextColor(WHITE) ;
-        display.setTextSize(4) ;
+        display.setTextSize(1) ;
         display.print(transpositionPosition) ;
       } else {
-        display.setCursor(28, 22) ;
+        display.setCursor(100, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
         display.setTextColor(WHITE) ;
-        display.setTextSize(4) ;
+        display.setTextSize(1) ;
         display.print(transpositionPosition) ;
-      }
-      
+      }      
     break;
     case 1:
     
     break;
   }
+
+  display.drawRect(1, (1+(menuCursor[MAIN_MENU][YPOS]-menuCursor[MAIN_MENU][YSCROLL])*16), 126, 13, WHITE) ;
   
 }
 
