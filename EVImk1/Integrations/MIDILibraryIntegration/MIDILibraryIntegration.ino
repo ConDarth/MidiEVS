@@ -179,20 +179,13 @@ int pressureMAX = 520 ;
 int pressureVal = 0 ;
 int pressureLast = 0 ;
 
-int breathCurveRates[5] = { 3, 6, 20, 80, 400} ;
+uint8_t breathCurveRates[10] = { 2, 3, 4, 6, 8, 10, 20, 40, 80, 200} ;
 //slope for each quantized section [0,1]
-float breathCurveSlope[4][10] = { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},   //constant slope
-                                  { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},   //linear slope
-                                  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},   //logarithmic slope
-                                  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} } ;//exponential slope
-
+float breathCurveSlope[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ; //slope data storage
+                                  
 //intercept for each quantized section [0,16383]
-int breathCurveIntercept[4][10] = { { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},   //constant intercept
-                                    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},   //linear intercept
-                                    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},   //logarithmic intercept
-                                    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} } ;//exponential intercept
-
-
+int breathCurveIntercept[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ;   //intercept data storage
+                                    
 /**********************************************************************************************************************************************/
 
 int biteSensorRaw = 0 ;
@@ -274,9 +267,7 @@ void setup() {
 
   pitch[0] = transpositionPitch ; //sets initial pitch so its not an empty value
 
-  breathLogCurve(0) ;// sets initial values for the breath curves
-  breathExpCurve(0) ;// both initially set to 0 rate for now
-                     //later will input directly from the fram
+  setBreathCurve(2, 0) ; // sets initial values for the breath curve 
 
   pinMode(CHORD_QUALITY_PIN_1, INPUT_PULLUP) ;
   pinMode(CHORD_QUALITY_PIN_2, INPUT_PULLUP) ;
@@ -1063,12 +1054,12 @@ void getJoystickMode() {
 void getPressure() {
   pressureRaw = rangeClip(pressureRaw, pressureOnTHR, pressureMAX) ;
   pressureVal = map(pressureRaw, pressureOnTHR, pressureMAX, 0, 16383) ;
-  pressureVal = processBreathData(2, pressureVal) ;
+  pressureVal = processBreathData(pressureVal) ;
 }
 
 /**********************************************************************************************************************************************/
 
-int processBreathData(int bcNum, int rawData) {
+int processBreathData(int rawData) {
   int quanta = 0;
   int raw = rawData ;
   
@@ -1094,8 +1085,57 @@ int processBreathData(int bcNum, int rawData) {
     quanta = 0 ;
   }
   
-  int processedData = breathCurveSlope[bcNum][quanta]*rawData + breathCurveIntercept[bcNum][quanta] ;
+  int processedData = breathCurveSlope[quanta]*rawData + breathCurveIntercept[quanta] ;
   return processedData ;
+}
+
+/**********************************************************************************************************************************************/
+
+void setBreathCurve(uint8_t type, uint8_t rate) {
+  switch(type) {
+    case 0:
+      breathConstantCurve(rate) ;
+    break ;
+    case 1:
+      breathLinearCurve(rate) ;
+    break ;
+    case 2:
+      breathLogCurve(rate) ;
+    break;
+    case 3:
+      breathExpCurve(rate) ;
+    break ;
+    case 4:
+      breathSinCurve(rate) ;
+    break ;
+    default :
+      breathLinearCurve(rate) ;
+    break ;
+  }
+}
+
+/**********************************************************************************************************************************************/
+
+void breathConstantCurve(int rate) {
+
+  for (int i=0; i<10; i++) {
+    breathCurveSlope[i] = 0 ;
+  }
+  for (int i=0; i<10; i++) {
+    breathCurveIntercept[i] = 16383 ;
+  }  
+}
+
+/**********************************************************************************************************************************************/
+
+void breathLinearCurve(int rate) {
+
+  for (int i=0; i<10; i++) {
+    breathCurveSlope[i] = 1 ;
+  }
+  for (int i=0; i<10; i++) {
+    breathCurveIntercept[i] = 0 ;
+  }  
 }
 
 /**********************************************************************************************************************************************/
@@ -1106,10 +1146,10 @@ void breathLogCurve(int rate) {
     bcValue[i] = -breathCurveRates[rate]*( pow(breathCurveRates[rate], (float) -i/10) - 1) / (breathCurveRates[rate] - 1) ;
   }
   for (int i=0; i<10; i++) {
-    breathCurveSlope[2][i] = 10*(bcValue[i+1] - bcValue[i]) ;
+    breathCurveSlope[i] = 10*(bcValue[i+1] - bcValue[i]) ;
   }
   for (int i=0; i<10; i++) {
-    breathCurveIntercept[2][i] = 16383*(bcValue[i] - (breathCurveSlope[2][i]*i/10)) ;
+    breathCurveIntercept[i] = 16383*(bcValue[i] - (breathCurveSlope[i]*i/10)) ;
   }  
 }
 
@@ -1121,10 +1161,35 @@ void breathExpCurve(int rate) {
     bcValue[i] =(pow(breathCurveRates[rate], (float) i/10) - 1) / (breathCurveRates[rate] - 1) ;
   }
   for (int i=0; i<10; i++) {
-    breathCurveSlope[3][i] = 10*(bcValue[i+1] - bcValue[i]) ;
+    breathCurveSlope[i] = 10*(bcValue[i+1] - bcValue[i]) ;
   }
   for (int i=0; i<10; i++) {
-    breathCurveIntercept[3][i] = 16383*(bcValue[i] - (breathCurveSlope[3][i]*i/10)) ;
+    breathCurveIntercept[i] = 16383*(bcValue[i] - (breathCurveSlope[i]*i/10)) ;
+  }
+}
+
+/**********************************************************************************************************************************************/
+
+void breathSinCurve(int rate) {
+  float bcValue[11] ;
+  for (int i=0; i<=10; i++) {
+    int valA = (pow(breathCurveRates[5], (float) i/10) - 1) / (breathCurveRates[5] - 1) ;
+    int valB = -breathCurveRates[5]*( pow(breathCurveRates[5], (float) -i/10) - 1) / (breathCurveRates[5] - 1) ;
+    if (i < rate) {
+      bcValue[i] =valA ;
+    } else if (i == rate) {
+      bcValue[i] = (2*valA + valB)/3 ;
+    } else if (i == rate+1) {
+      bcValue[i] = (valA + 2*valB)/3 ;
+    } else {
+      bcValue[i] = valB ;
+    }
+  }
+  for (int i=0; i<10; i++) {
+    breathCurveSlope[i] = 10*(bcValue[i+1] - bcValue[i]) ;
+  }
+  for (int i=0; i<10; i++) {
+    breathCurveIntercept[i] = 16383*(bcValue[i] - (breathCurveSlope[i]*i/10)) ;
   }
 }
 

@@ -4,13 +4,10 @@
 #include <Adafruit_SSD1306.h>
 #include "Adafruit_FRAM_I2C.h"
 
+/**********************************************************************************************************************************************/
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-
-#define JOYSTICK_X_PORT A0
-#define JOYSTICK_Y_PORT A1
-#define SELECT_BUTTON_PIN 3
-#define BACK_BUTTON_PIN 2
 
 // Declaration for SSD1306 display connected using software SPI (default case):
 #define OLED_MOSI   9
@@ -18,6 +15,18 @@
 #define OLED_DC    11
 #define OLED_CS    12
 #define OLED_RESET 13
+
+/**********************************************************************************************************************************************/
+
+#define SELECT_BUTTON_PIN 3
+#define BACK_BUTTON_PIN 2
+
+#define JOYSTICK_X_PORT A0
+#define JOYSTICK_Y_PORT A1
+#define JOYSTICK_LOWER_THR 370
+#define JOYSTICK_UPPER_THR 653
+
+/**********************************************************************************************************************************************/
 
 #define XPOS 0 
 #define YPOS 1 
@@ -29,25 +38,52 @@
 #define YSIZE 7
 #define ABSVAL 8
 
+/**********************************************************************************************************************************************/
+
 #define MAIN_MENU 0
-#define SENSOR_ADJUST 1
+#define SENSOR_ADJUST_MENU 1
 #define MP_MODE 2
 #define MP_ADJUSTER 3
 #define MP_CHORD_SELECT 6
 #define MP_PRESET_SELECT 8
 #define CHORD_PITCH 9
+#define SENSOR_ADJUST 10
+#define BREATH_CURVE 11
+
+/**********************************************************************************************************************************************/
+
+#define SENSOR_UPDATE_DELAY 40
+
+#define SENSOR_ADJUST_RANGE_1 0
+#define SENSOR_ADJUST_RANGE_2 1
+#define SENSOR_ADJUST_LOWER_THR_1 2
+#define SENSOR_ADJUST_LOWER_THR_2 3
+#define SENSOR_ADJUST_UPPER_THR_1 4
+#define SENSOR_ADJUST_UPPER_THR_2 5
+#define SENSOR_ADJUST_MAX_1 6
+#define SENSOR_ADJUST_MAX_2 7
+
+/**********************************************************************************************************************************************/
 
 #define HARMONIZER 0 
 #define ROTATOR 1
 #define PRESET 2 
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT,
   OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 Adafruit_FRAM_I2C fram     = Adafruit_FRAM_I2C();
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
                            // xpos ypos xmax ymax xscroll yscroll xsize ysize absval
-int8_t menuCursor[10][9] = { {   1,   1,   1,   6,      1,      1,    1,    4,     1},    //main menu select
+int8_t menuCursor[12][9] = { {   1,   1,   1,   6,      1,      1,    1,    4,     1},    //main menu select
                              {   1,   1,   1,   5,      1,      1,    1,    4,     1},    //sensor adjust select
                              {   1,   1,   1,   3,      1,      1,    1,    3,     1},    //multiphonics mode select
                              {   1,   1,   1,   4,      1,      1,    1,    3,     1},    //multiphonics adjust selector (harmonizer)
@@ -56,19 +92,61 @@ int8_t menuCursor[10][9] = { {   1,   1,   1,   6,      1,      1,    1,    4,  
                              {   1,   1,   2,   5,      1,      1,    2,    3,     1},    //multiphonics adjust chord selector
                              {   1,   1,   2,   4,      1,      1,    2,    3,     1},    //multiphonics adjust chord selector w/o presets
                              {   1,   1,   2,   4,      1,      1,    2,    3,     1},    //multiphonics adjust preset select
-                             {   1,   1,   2,   2,      1,      1,    2,    2,     1} } ; //chord pitch selection
-                             
+                             {   1,   1,   2,   2,      1,      1,    2,    2,     1},    //chord pitch selection
+                             {   1,   2,   1,   3,      1,      1,    1,    3,     1},    //sensor adjuster select
+                             {   1,   1,   1,   5,      1,      1,    1,    3,     1} } ; //breath curve select
 
+
+/**********************************************************************************************************************************************/
+
+boolean menuUpdate = true ;
+int8_t menuCase = 0 ;
+
+/**********************************************************************************************************************************************/
+
+int8_t sensorAdjustMenuCase = 0 ;
+int8_t sensorAdjustCase = 0 ;
+boolean sensorAdjustBlinker = 1 ;
+unsigned long sensorAdjustLastTime = 0 ;
+unsigned long calibrationTimer = 0 ;
+static uint8_t calibrationSampleSize = 50 ;
+uint8_t calibrationSampler = 0 ;
+uint8_t calibrationTimings = 500/calibrationSampleSize ;
+uint16_t calibrationData[50] ;
+float calibrationMean = 0 ;
+float calibrationSD = 0 ;
+uint16_t sensorAdjustAddress[8] = {0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58} ;
+int16_t sensorAdjustRange = 1023 ;
+int16_t sensorAdjustLowerTHR = 250 ;
+int16_t sensorAdjustUpperTHR = 300 ;
+int16_t sensorAdjustMAX = 650 ;
+int16_t sensorRealPosition = 0 ;
+uint8_t sensorAdjustTHRState = 0 ;
+
+/**********************************************************************************************************************************************/
 
 int8_t transpositionPosition = 0 ;
 int8_t transpositionMAX = 12 ;
 int8_t transpositionMIN = -12 ;
 int8_t transpositionMenuCase = 0 ;
 unsigned long blinkerLastTime = 0 ;
-int transpositionAddress = 0x40 ;
+int transpositionAddress = 0x60 ;
 
-int8_t threeMenuPosition = 0 ;
-int8_t threeMenuCase = 0 ;
+/**********************************************************************************************************************************************/
+
+uint16_t breathCurveAddress = 0x61 ;
+uint8_t breathCurveSelectType = 0 ;
+int8_t breathCurveRate[] = {0, 0, 0} ; //log, exp, sin
+unsigned long breathCurveTimer = 0 ;
+boolean breathCurveBlinker = true ;
+uint8_t breathCurveBlinkerState = 0 ; //which controller to change 0=menu, 1=const, 2=linear, 3=log, 4=exp
+
+
+/**********************************************************************************************************************************************/
+
+int8_t mpSelectMenuCase = 0 ;
+
+/**********************************************************************************************************************************************/
 
 int8_t mpAdjusterMenuCase = 0 ;
 int8_t mpAdjustChordSelector = 0 ;
@@ -84,8 +162,7 @@ uint16_t static mpAdjustAddress[3] = {256, 384, 512} ;
 String mpAdjustType = "Harmonizer" ;
 char mpAdjustTypeShort = 'H' ;
 
-
-
+/**********************************************************************************************************************************************/
 
 boolean selectFunction = false ;
 boolean selectFunctionToggle = false ;
@@ -96,22 +173,28 @@ boolean backFunctionToggle = false ;
 boolean backButton = false ;
 boolean backButtonToggle = false ;
 
+/**********************************************************************************************************************************************/
+
 boolean cursorUp = false ;
 boolean cursorUpToggle = false ;
 boolean cursorDown = false ;
 boolean cursorDownToggle = false ;
-int joystickY = 512 ;
+uint16_t joystickY = 512 ;
 boolean joystickYToggle = false ;
 boolean cursorLeft = false ;
 boolean cursorLeftToggle = false ;
 boolean cursorRight = false ;
 boolean cursorRightToggle = false ;
-int joystickX = 512 ;
+uint16_t joystickX = 512 ;
 boolean joystickXToggle = false ;
+int16_t joystickXAbs = 0 ;
+int16_t joystickYAbs = 0 ;
 
-boolean menuUpdate = true ;
-int8_t menuCase = 0 ;
-int8_t oneMenuCase = 0 ;
+unsigned long timer = 0 ;
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void setup() {
   // put your setup code here, to run once:
@@ -137,50 +220,91 @@ Serial.begin(9600);
   pinMode(BACK_BUTTON_PIN, INPUT_PULLUP) ;
 
   transpositionPosition = fram.read8(transpositionAddress) ; //reads transposition from fram to initialize
+  
+  breathCurveSelectType = fram.read8(breathCurveAddress) ; //initializes values for the breath curves
+  breathCurveRate[0] = fram.read8(breathCurveAddress+1) ;
+  breathCurveRate[1] = fram.read8(breathCurveAddress+2) ;
+  breathCurveRate[2] = fram.read8(breathCurveAddress+3) ;
+  //run the quantization for the breath curves here based on retreived numbers
 }
 
-void loop() {
+/**********************************************************************************************************************************************/
+
+void loop() {  
   // put your main code here, to run repeatedly
+  joystickUpdate() ;  
+  buttonUpdate() ;
+  
+  mainMenuControl() ;  
+  mainMenuPrint() ;  
+}
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void joystickUpdate() {
   joystickY = analogRead(JOYSTICK_Y_PORT) ;
   joystickX = analogRead(JOYSTICK_X_PORT) ;
-  selectButton = digitalRead(SELECT_BUTTON_PIN) ;
-  backButton = digitalRead(BACK_BUTTON_PIN) ;
   
-  if ((joystickY > 768) && !joystickYToggle) {
-    cursorDown = true ;
-    cursorDownToggle = true ;
-    joystickYToggle = true ;
-    menuUpdate = true ;
+  if (joystickY > JOYSTICK_UPPER_THR) {
+    if (!joystickYToggle) {
+      cursorDown = true ;
+      cursorDownToggle = true ;
+      joystickYToggle = true ;
+      menuUpdate = true ;
+    }  
+    joystickYAbs = JOYSTICK_UPPER_THR - joystickY ;
   } 
-  if ((joystickY < 256) && !joystickYToggle) {
-    cursorUp = true ;
-    cursorUpToggle = true ;
-    joystickYToggle = true ;
-    menuUpdate = true ;
+  if (joystickY < JOYSTICK_LOWER_THR) {
+    if (!joystickYToggle) {
+      cursorUp = true ;
+      cursorUpToggle = true ;
+      joystickYToggle = true ;
+      menuUpdate = true ;
+    }  
+    joystickYAbs = JOYSTICK_LOWER_THR - joystickY ;
   } 
-  if (joystickYToggle && (joystickY > 270) && (joystickY < 750)) {
+  if (joystickYToggle && (joystickY > JOYSTICK_LOWER_THR+20) && (joystickY < JOYSTICK_UPPER_THR-20)) {
     joystickYToggle = false ;
     cursorUp = false ;
     cursorDown = false ;
+
+    joystickYAbs = 0 ;
   }
 
-  if ((joystickX < 256) && !joystickXToggle) {
-    menuUpdate = true ;
-    cursorRight = true ;
-    cursorRightToggle = true ;
-    joystickXToggle = true ;
+  if (joystickX < JOYSTICK_LOWER_THR) {
+    if (!joystickXToggle) {
+      menuUpdate = true ;
+      cursorRight = true ;
+      cursorRightToggle = true ;
+      joystickXToggle = true ;
+    }
+    joystickXAbs = JOYSTICK_LOWER_THR - joystickX ;
   }
-  if ((joystickX > 768) && !joystickXToggle) {
-    menuUpdate = true ;
-    cursorLeft = true ;
-    cursorLeftToggle = true ;
-    joystickXToggle = true ;
+  if (joystickX > JOYSTICK_UPPER_THR) {
+    if (!joystickXToggle) {
+      menuUpdate = true ;
+      cursorLeft = true ;
+      cursorLeftToggle = true ;
+      joystickXToggle = true ;
+    }
+    joystickXAbs = JOYSTICK_UPPER_THR - joystickX ;
   }
-  if (joystickXToggle && (joystickX > 270) && (joystickX < 750)) {
+  if (joystickXToggle && (joystickX > JOYSTICK_LOWER_THR+20) && (joystickX < JOYSTICK_UPPER_THR-20)) {
     joystickXToggle = false ;
     cursorLeft = false ;
     cursorRight = false ;
+
+    joystickXAbs = 0 ;
   }
+}
+
+/**********************************************************************************************************************************************/
+
+void buttonUpdate() {
+  selectButton = digitalRead(SELECT_BUTTON_PIN) ;
+  backButton = digitalRead(BACK_BUTTON_PIN) ;
 
   if (!selectButton && !selectButtonToggle) {
     selectButtonToggle = true ;
@@ -203,29 +327,34 @@ void loop() {
     backButtonToggle = false ;
     backFunction = false ;
   }
-  
+}
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void mainMenuControl() {
   switch(menuCase) {
     case 0:
       initialMenuControl() ;
     break;
     case 1:
-      oneMenuControl() ;
+      sensorAdjustMenuControl() ;
     break;
     case 2:
       transpositionMenuControl() ;
     break;
     case 3:
-      threeMenuControl() ;
+      breathCurveMenuControl() ;
     break;
     case 4:
-      fourMenuControl() ;
+      harmonizerMenuControl() ;
     break;
     case 5:
-      fiveMenuControl() ;
+      rotatorMenuControl() ;
     break;
     case 6:
-      sixMenuControl() ;
+      presetMenuControl() ;
     break;
     case 7:
       sevenMenuControl() ;
@@ -237,8 +366,11 @@ void loop() {
 
     break;
   }
-  
-  
+}
+
+/**********************************************************************************************************************************************/
+
+void mainMenuPrint() {
   if (menuUpdate) {
     display.clearDisplay() ;
 
@@ -247,22 +379,22 @@ void loop() {
         initialMenuPrint() ;
       break;
       case 1:
-        oneMenuPrint() ;
+        sensorAdjustMenuPrint() ;
       break;
       case 2:
         transpositionMenuPrint() ;
       break;
       case 3:
-        threeMenuPrint() ;
+        breathCurveMenuPrint() ;
       break;
       case 4:
-        fourMenuPrint() ;
+        harmonizerMenuPrint() ;
       break;
       case 5:
-        fiveMenuPrint() ;
+        rotatorMenuPrint() ;
       break;
       case 6:
-        sixMenuPrint() ;
+        presetMenuPrint() ;
       break;
       case 7:
         sevenMenuPrint() ;
@@ -279,8 +411,22 @@ void loop() {
     display.display() ;
     menuUpdate = false ;
   }
-
 }
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void initialMenuControl() {
+  if (selectFunction && selectFunctionToggle) {
+    selectFunctionToggle = false ;
+    menuCase = menuCursor[MAIN_MENU][YPOS] ;
+  }
+  
+  menuControl(MAIN_MENU) ;
+}
+
+/**********************************************************************************************************************************************/
 
 void initialMenuPrint() {
     for (int i=0; i<4; i++) {
@@ -300,35 +446,24 @@ void initialMenuPrint() {
           display.setTextSize(1) ;   
           display.print("Transposition") ;
 
-          if (transpositionPosition > 9) {
-            display.setCursor(102, (4+16*i)) ;
-            display.setTextColor(WHITE) ;
-            display.setTextSize(1) ;
-            display.print(transpositionPosition) ;
-          } else if (transpositionPosition > -1) {
-            display.setCursor(104, (4+16*i)) ;
-            display.setTextColor(WHITE) ;
-            display.setTextSize(1) ;
-            display.print(transpositionPosition) ;
-          } else if (transpositionPosition > -10) {
-            display.setCursor(102, (4+16*i)) ;
-            display.setTextColor(WHITE) ;
-            display.setTextSize(1) ;
-            display.print(transpositionPosition) ;
-          } else {
-            display.setCursor(100, (4+16*i)) ;
-            display.setTextColor(WHITE) ;
-            display.setTextSize(1) ;
-            display.print(transpositionPosition) ;
-          }
+          display.setCursor((100-2*sizeOfInt(transpositionPosition)), (4+16*i)) ;
+          display.setTextColor(WHITE) ;
+          display.setTextSize(1) ;
+          display.print(transpositionPosition) ;
+          
         break;
         case 3:
           display.setCursor(4,(4+16*i)) ;
           display.setTextColor(WHITE) ;
-          display.setTextSize(1) ;   
+          display.setTextSize(1) ; 
+          display.print("Breath") ;
+          display.print(" ") ;
+          display.print("Curve") ;
+          /*  
           display.print("Multi-Phonics") ;
           display.print(" ") ;
-          display.print("Mode") ;    
+          display.print("Mode") ; 
+          */   
         break;
         case 4:
           display.setCursor(4,(4+16*i)) ;
@@ -361,22 +496,12 @@ void initialMenuPrint() {
     display.drawRect(1, (1+(menuCursor[MAIN_MENU][YPOS]-menuCursor[MAIN_MENU][YSCROLL])*16), 126, 13, WHITE) ;
 }
 
-void initialMenuControl() {
-  menuControl(MAIN_MENU) ;
-  
-  if (selectFunction && selectFunctionToggle) {
-    selectFunctionToggle = false ;
-    menuCase = menuCursor[MAIN_MENU][YPOS] ;
-  }
-  if (cursorRight && cursorRightToggle) {
-    cursorRightToggle = false ;
-    menuCase = menuCursor[MAIN_MENU][YPOS] ;
-  }
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
-}
-
-void oneMenuControl() {
-  switch(oneMenuCase) {
+void sensorAdjustMenuControl() {
+  switch(sensorAdjustMenuCase) {
     case 0: 
       if (backFunction && backFunctionToggle) {
         backFunctionToggle = false ;
@@ -384,89 +509,48 @@ void oneMenuControl() {
       }
       if (selectFunction && selectFunctionToggle) {
         selectFunctionToggle = false ;
-        oneMenuCase = menuCursor[SENSOR_ADJUST][YPOS] ;
-      }
-
-      if (cursorLeft && cursorLeftToggle) {
-        menuCase = 0 ;
-      }
-      if (cursorRight && cursorRightToggle) {
-        oneMenuCase = menuCursor[SENSOR_ADJUST][YPOS] ;
+        sensorAdjustMenuCase = menuCursor[SENSOR_ADJUST_MENU][YPOS] ;
+        
+        sensorAdjustRange = fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_RANGE_1) ;
+        sensorAdjustRange += fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_RANGE_2) << 8 ;
+        
+        sensorAdjustFRAMRead() ;
       }
       
-      menuControl(SENSOR_ADJUST) ;
+      menuControl(SENSOR_ADJUST_MENU) ;
       
     break;
     case 1:
-      if (backFunction && backFunctionToggle) {
-        backFunctionToggle = false ;
-        oneMenuCase = 0 ;
-      }
-      if (cursorLeft && cursorLeftToggle) {
-        cursorLeftToggle = false ;
-        oneMenuCase = 0 ;
-      }
+      sensorAdjustControl() ;
     break;
     case 2:
-      if (backFunction && backFunctionToggle) {
-        backFunctionToggle = false ;
-        oneMenuCase = 0 ;
-      }
-      if (cursorLeft && cursorLeftToggle) {
-        cursorLeftToggle = false ;
-        oneMenuCase = 0 ;
-      }
+      sensorAdjustControl() ;
     break;
     case 3:
-      if (backFunction && backFunctionToggle) {
-        backFunctionToggle = false ;
-        oneMenuCase = 0 ;
-      }
-      if (cursorLeft && cursorLeftToggle) {
-        cursorLeftToggle = false ;
-        oneMenuCase = 0 ;
-      }
+      sensorAdjustControl() ;
     break;
     case 4:
-      if (backFunction && backFunctionToggle) {
-        backFunctionToggle = false ;
-        oneMenuCase = 0 ;
-      }
-      if (cursorLeft && cursorLeftToggle) {
-        cursorLeftToggle = false ;
-        oneMenuCase = 0 ;
-      }
+      sensorAdjustControl() ;
     break;
     case 5:
-      if (backFunction && backFunctionToggle) {
-        backFunctionToggle = false ;
-        oneMenuCase = 0 ;
-      }
-      if (cursorLeft && cursorLeftToggle) {
-        cursorLeftToggle = false ;
-        oneMenuCase = 0 ;
-      }
+      sensorAdjustControl() ;
     break;
     case 6:
-      if (backFunction && backFunctionToggle) {
-        backFunctionToggle = false ;
-        oneMenuCase = 0 ;
-      }
-      if (cursorLeft && cursorLeftToggle) {
-        cursorLeftToggle = false ;
-        oneMenuCase = 0 ;
-      }
+      sensorAdjustControl() ;
     break;
   }
   
 }
-void oneMenuPrint() {
 
-  switch(oneMenuCase) {
+/**********************************************************************************************************************************************/
+
+void sensorAdjustMenuPrint() {
+
+  switch(sensorAdjustMenuCase) {
     case 0:
       for (int i=0; i<4; i++) {
       
-      switch(menuCursor[SENSOR_ADJUST][YSCROLL]+i) {
+      switch(menuCursor[SENSOR_ADJUST_MENU][YSCROLL]+i) {
         case 1:
           display.setCursor(4,(4+16*i)) ;
           display.setTextColor(WHITE) ;
@@ -524,7 +608,7 @@ void oneMenuPrint() {
       }
     }
     
-    display.drawRect(1, (1+(menuCursor[SENSOR_ADJUST][YPOS]-menuCursor[SENSOR_ADJUST][YSCROLL])*16), 126, 13, WHITE) ;
+    display.drawRect(1, (1+(menuCursor[SENSOR_ADJUST_MENU][YPOS]-menuCursor[SENSOR_ADJUST_MENU][YSCROLL])*16), 126, 13, WHITE) ;
     break;
     case 1:
       display.setCursor(4,4) ;
@@ -585,44 +669,294 @@ void oneMenuPrint() {
     
 }
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
 void sensorAdjustControl() {
+
+  switch(sensorAdjustMenuCase) {
+    case 1:
+      sensorRealPosition = 1023 - analogRead(A0) ;
+    break;
+    case 2:
+      sensorRealPosition = 200 ;
+    break;
+    case 3:
+      sensorRealPosition = 200 ;
+    break;
+    case 4:
+      sensorRealPosition = 200 ;
+    break;
+    case 5:
+      sensorRealPosition = 200 ;
+    break;
+  }
+  sensorRealPosition = constrain(sensorRealPosition, 0, sensorAdjustRange) ;
   
+  switch(sensorAdjustCase) {
+    case 0:
+      menuControl(SENSOR_ADJUST) ;
+      if (backFunction && backFunctionToggle) {
+        backFunctionToggle = false ;
+        sensorAdjustMenuCase = 0 ;
+        menuCursor[SENSOR_ADJUST][YPOS] = 2 ;
+      }
+      if (selectFunction && selectFunctionToggle) {
+        selectFunctionToggle = false ;
+        sensorAdjustCase = menuCursor[SENSOR_ADJUST][YPOS] ;
+        calibrationTimer = millis() ;
+      }
+    break;
+    case 1:
+      if (calibrationSampler <= calibrationSampleSize) {
+        if ((millis() - calibrationTimer) >= calibrationTimings*calibrationSampler) {
+          calibrationData[calibrationSampler] = sensorRealPosition ;
+          calibrationSampler ++ ;
+        }
+
+        if (calibrationSampler == calibrationSampleSize) {
+          calibrationMean = 0 ;
+          calibrationSD = 0 ;
+          
+          for (int i=0; i<calibrationSampleSize; i++) {
+            calibrationMean += calibrationData[i] ;
+          }
+          calibrationMean = calibrationMean/calibrationSampleSize ;
+          
+          for (int i=0; i<calibrationSampleSize; i++) {
+            calibrationSD += sq(calibrationData[i]-calibrationMean) ;
+          }
+          calibrationSD = calibrationSD/(calibrationSampleSize-1) ;
+          calibrationSD = sqrt(calibrationSD) ;
+
+          calibrationSampler ++ ;
+        }
+      }
+      
+      if ((millis() - calibrationTimer) >= 1000 && (calibrationSampler > calibrationSampleSize)) {
+        sensorAdjustCase = 0 ;
+
+        uint16_t diff = sensorAdjustMAX - calibrationMean ;
+        
+        sensorAdjustLowerTHR = calibrationMean + 2*calibrationSD + 0.05*diff ;
+        sensorAdjustUpperTHR = calibrationMean + 5*calibrationSD  + 0.1*diff;
+
+        sensorAdjustLowerTHR = constrain(sensorAdjustLowerTHR, 0, sensorAdjustRange) ;
+        sensorAdjustUpperTHR = constrain(sensorAdjustUpperTHR, 0, sensorAdjustRange) ;
+
+        sensorAdjustFRAMWrite() ;
+
+        calibrationSampler = 0 ;
+      }
+      
+    break; 
+    case 2:
+      switch(sensorAdjustTHRState) {
+        case 0:
+          if (backFunction && backFunctionToggle) {
+            backFunctionToggle = false ;
+            sensorAdjustCase = 0 ;
+            sensorAdjustTHRState = 0 ;
+
+            sensorAdjustFRAMRead() ;
+          }
+          if (selectFunction && selectFunctionToggle) {
+            selectFunctionToggle = false ;
+            sensorAdjustTHRState = 1 ;
+            
+          }
+ 
+          if ((millis() - sensorAdjustLastTime) > SENSOR_UPDATE_DELAY) {
+            float adjuster = (float) (joystickXAbs * SENSOR_UPDATE_DELAY) / (JOYSTICK_LOWER_THR) ;
+            adjuster = (adjuster * sensorAdjustRange) / 2000 ;
+          
+            sensorAdjustUpperTHR += adjuster ;
+            sensorAdjustUpperTHR = constrain(sensorAdjustUpperTHR, 0, sensorAdjustRange) ;
+            if (sensorAdjustUpperTHR < sensorAdjustLowerTHR) {
+              sensorAdjustLowerTHR = sensorAdjustUpperTHR ;
+            }
+            if (sensorAdjustUpperTHR > sensorAdjustMAX) {
+              sensorAdjustMAX = sensorAdjustUpperTHR ;
+            }
+          }
+        break;
+        case 1:
+          if (backFunction && backFunctionToggle) {
+            backFunctionToggle = false ;
+            sensorAdjustCase = 0 ;
+            sensorAdjustTHRState = 0 ;
+
+            sensorAdjustFRAMRead() ;
+          }
+          if (selectFunction && selectFunctionToggle) {
+            selectFunctionToggle = false ;
+            sensorAdjustCase = 0 ;
+            sensorAdjustTHRState = 0 ;
+
+            sensorAdjustFRAMWrite() ;
+          }
+          
+          if ((millis() - sensorAdjustLastTime) > SENSOR_UPDATE_DELAY) {
+            float adjuster = (float) (joystickXAbs * SENSOR_UPDATE_DELAY) / (JOYSTICK_LOWER_THR) ;
+            adjuster = (adjuster * sensorAdjustRange) / 2000 ;
+          
+            sensorAdjustLowerTHR += adjuster ;
+            sensorAdjustLowerTHR = constrain(sensorAdjustLowerTHR, 0, sensorAdjustRange) ;
+            if (sensorAdjustLowerTHR > sensorAdjustUpperTHR) {
+              sensorAdjustUpperTHR = sensorAdjustLowerTHR ;
+            }
+            if (sensorAdjustLowerTHR > sensorAdjustMAX) {
+              sensorAdjustMAX = sensorAdjustLowerTHR ;
+            }
+          }
+        break;
+      }
+    break;
+    case 3:
+      if (backFunction && backFunctionToggle) {
+        backFunctionToggle = false ;
+        sensorAdjustCase = 0 ;
+
+        sensorAdjustFRAMRead() ;
+      }
+      if (selectFunction && selectFunctionToggle) {
+        selectFunctionToggle = false ;
+        sensorAdjustCase = 0 ;
+
+        sensorAdjustFRAMWrite() ;
+      }
+      if ((millis() - sensorAdjustLastTime) > SENSOR_UPDATE_DELAY) {
+        float adjuster = (float) (joystickXAbs * SENSOR_UPDATE_DELAY) / (JOYSTICK_LOWER_THR) ;
+        adjuster = (adjuster * sensorAdjustRange) / 2000 ;
+        
+        sensorAdjustMAX += adjuster ;
+        sensorAdjustMAX = constrain(sensorAdjustMAX, 0, sensorAdjustRange) ;
+        if (sensorAdjustMAX < sensorAdjustUpperTHR) {
+          sensorAdjustUpperTHR = sensorAdjustMAX ;
+        }
+        if (sensorAdjustMAX < sensorAdjustLowerTHR) {
+          sensorAdjustLowerTHR = sensorAdjustMAX ;
+        }
+      }
+    break;
+  }
+
+  if ((millis() - sensorAdjustLastTime) > SENSOR_UPDATE_DELAY) {
+    menuUpdate = true ;
+    sensorAdjustLastTime = millis() ;
+  }
 }
 
+/**********************************************************************************************************************************************/
+
+void sensorAdjustFRAMRead() {
+  sensorAdjustLowerTHR = fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_LOWER_THR_1) ;
+  sensorAdjustLowerTHR += fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_LOWER_THR_2) << 8 ;
+      
+  sensorAdjustUpperTHR = fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_UPPER_THR_1) ;
+  sensorAdjustUpperTHR += fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_UPPER_THR_2) << 8 ;
+        
+  sensorAdjustMAX = fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_MAX_1) ;
+  sensorAdjustMAX += fram.read8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_MAX_2) << 8 ;
+}
+
+/**********************************************************************************************************************************************/
+
+void sensorAdjustFRAMWrite() {
+  int8_t data1 = sensorAdjustLowerTHR & B11111111 ;
+  int8_t data2 = sensorAdjustLowerTHR >> 8 ;
+  fram.write8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_LOWER_THR_1, data1) ;
+  fram.write8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_LOWER_THR_2, data2) ;
+ 
+  data1 = sensorAdjustUpperTHR & B11111111 ;
+  data2 = sensorAdjustUpperTHR >> 8 ;
+  fram.write8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_UPPER_THR_1, data1) ;
+  fram.write8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_UPPER_THR_2, data2) ;
+
+  data1 = sensorAdjustMAX & B11111111 ;
+  data2 = sensorAdjustMAX >> 8 ;
+  fram.write8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_MAX_1, data1) ;
+  fram.write8(sensorAdjustAddress[menuCursor[SENSOR_ADJUST_MENU][YPOS]-1]+SENSOR_ADJUST_MAX_2, data2) ;
+}
+
+/**********************************************************************************************************************************************/
+
 void sensorAdjustPrint() {
+  display.setCursor(108,4) ;
+  display.setTextColor(WHITE) ;
+  display.setTextSize(1) ;   
+  display.print("CAL") ;  
+
   display.setCursor(4,21) ;
   display.setTextColor(WHITE) ;
   display.setTextSize(1) ;   
-  display.print("THR") ;    
+  display.print("THR") ; 
 
   display.setCursor(4,36) ;
   display.setTextColor(WHITE) ;
   display.setTextSize(1) ;   
   display.print("SEN") ;  
-
+  
   display.setCursor(4,51) ;
   display.setTextColor(WHITE) ;
   display.setTextSize(1) ;   
-  display.print("MAX") ;
-
-  display.drawRect(26, 18, 96, 13, WHITE) ;
-  display.drawFastVLine(26, 22, 5, BLACK) ;
-  display.drawFastVLine(121, 22, 5, BLACK) ;
+  display.print("MAX") ;  
+    
+  if (menuCursor[SENSOR_ADJUST][YPOS] == 1) {
+    display.drawRect(105, 1, 23, 13, WHITE) ;
+  } else if (menuCursor[SENSOR_ADJUST][YPOS] == 2) {
+    display.drawRect(1, 18, 23, 13, WHITE) ;
+  } else if (menuCursor[SENSOR_ADJUST][YPOS] == 3) {
+    display.drawRect(1, 48, 23, 13, WHITE) ;
+  }
   
-  display.drawFastVLine(46, 21, 7, WHITE) ; //variable for the THR setting
+  display.drawRect(26, 18, 102, 13, WHITE) ;
+  display.drawFastVLine(26, 22, 5, BLACK) ;
+  display.drawFastVLine(127, 22, 5, BLACK) ;
+
+  uint16_t a = (float) sensorAdjustLowerTHR*100/sensorAdjustRange ;
+  uint16_t b = (float) sensorAdjustUpperTHR*100/sensorAdjustRange ;
+  display.drawFastVLine(27+a, 22, 5, WHITE) ; //variable for the Lower THR setting
+  display.drawFastVLine(27+b, 21, 7, WHITE) ; //variable for the Upper THR setting
   
   display.drawFastVLine(26, 36, 7, WHITE) ;
-  display.drawFastVLine(121, 36, 7, WHITE) ;
+  display.drawFastVLine(127, 36, 7, WHITE) ;
 
-  display.drawFastVLine(36, 38, 3, WHITE) ; //variable for realtime sensor output  
+  uint16_t c = (float) sensorRealPosition*100/sensorAdjustRange ;
+  display.drawFastVLine(27+c, 38, 3, WHITE) ; //variable for realtime sensor output  
 
 
-  display.drawRect(26, 48, 96, 13, WHITE) ;
+  display.drawRect(26, 48, 102, 13, WHITE) ;
   display.drawFastVLine(26, 52, 5, BLACK) ;
-  display.drawFastVLine(121, 52, 5, BLACK) ;
-  
-  display.drawFastVLine(106, 51, 7, WHITE) ; // variable for 
+  display.drawFastVLine(127, 52, 5, BLACK) ;
+
+  uint16_t d = (float) sensorAdjustMAX*100/sensorAdjustRange ;
+  display.drawFastVLine(27+d, 51, 7, WHITE) ; // variable for MAX setting
+
+  switch(sensorAdjustCase) {
+    case 0:
+    break;
+    case 1:
+      display.fillRect(0, 0, 128, 36, BLACK) ;
+      display.fillRect(0, 44, 128, 20, BLACK) ;
+      display.setCursor(19, 17) ;
+      display.setTextColor(WHITE) ;
+      display.setTextSize(1) ;   
+      display.print("Calibrating") ;
+      display.print(" ") ;
+      display.print("...") ;
+    break;
+    case 2:
+    break;
+    case 3:
+    break;
+  }
 }
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void transpositionMenuControl() {
   
@@ -631,10 +965,9 @@ void transpositionMenuControl() {
     menuUpdate = true ;
     blinkerLastTime = millis() ;
   }
-  if ((millis() - blinkerLastTime > 150) && (transpositionMenuCase == 1)) {
+  if ((millis() - blinkerLastTime > 200) && (transpositionMenuCase == 1)) {
     transpositionMenuCase = 0 ;
     menuUpdate = true ;
-    blinkerLastTime = true ;
     blinkerLastTime = millis() ;
   }
   
@@ -670,6 +1003,9 @@ void transpositionMenuControl() {
 
   
 }
+
+/**********************************************************************************************************************************************/
+
 void transpositionMenuPrint() {
   for (int i=0; i<4; i++) {
     switch(menuCursor[MAIN_MENU][YSCROLL]+i) {
@@ -691,9 +1027,9 @@ void transpositionMenuPrint() {
         display.setCursor(4,(4+16*i)) ;
         display.setTextColor(WHITE) ;
         display.setTextSize(1) ;   
-        display.print("Multi-Phonics") ;
+        display.print("Breath") ;
         display.print(" ") ;
-        display.print("Mode") ;    
+        display.print("Curve") ;    
       break;
       case 4:
         display.setCursor(4,(4+16*i)) ;
@@ -711,28 +1047,13 @@ void transpositionMenuPrint() {
   }
 
   switch(transpositionMenuCase) {
-    case 0:  
-      if (transpositionPosition > 9) {
-        display.setCursor(102, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
-        display.setTextColor(WHITE) ;
-        display.setTextSize(1) ;
-        display.print(transpositionPosition) ;
-      } else if (transpositionPosition > -1) {
-        display.setCursor(104, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
-        display.setTextColor(WHITE) ;
-        display.setTextSize(1) ;
-        display.print(transpositionPosition) ;
-      } else if (transpositionPosition > -10) {
-        display.setCursor(102, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
-        display.setTextColor(WHITE) ;
-        display.setTextSize(1) ;
-        display.print(transpositionPosition) ;
-      } else {
-        display.setCursor(100, (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
-        display.setTextColor(WHITE) ;
-        display.setTextSize(1) ;
-        display.print(transpositionPosition) ;
-      }      
+    case 0: 
+      int s = sizeOfInt(transpositionPosition) ;
+          
+      display.setCursor((100-2*s), (36-menuCursor[MAIN_MENU][YSCROLL]*16)) ;
+      display.setTextColor(WHITE) ;
+      display.setTextSize(1) ;
+      display.print(transpositionPosition) ;      
     break;
     case 1:
     
@@ -743,7 +1064,168 @@ void transpositionMenuPrint() {
   
 }
 
-void threeMenuControl() {
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void breathCurveMenuControl() {
+  switch(breathCurveBlinkerState) {
+    case 0:
+      menuControl(BREATH_CURVE) ;
+      if (backFunction && backFunctionToggle) {
+        backFunctionToggle = false ;
+        menuCase = 0 ;
+      }
+      if (selectFunction && selectFunctionToggle) {
+        selectFunctionToggle = false ;
+        breathCurveBlinkerState = menuCursor[BREATH_CURVE][YPOS] ;
+    
+        breathCurveSelectType = menuCursor[BREATH_CURVE][YPOS]-1 ;
+        fram.write8(breathCurveAddress, breathCurveSelectType) ;
+      }
+      
+    break;
+    case 1:
+      breathCurveBlinkerState = 0 ;
+    break;
+    case 2:
+      breathCurveBlinkerState = 0 ;
+    break;
+    case 3:
+      breathCurveRateControl(0) ;
+    break;
+    case 4:
+      breathCurveRateControl(1) ;
+    break;
+    case 5:
+      breathCurveRateControl(2) ;
+    break; 
+  } 
+}
+
+/**********************************************************************************************************************************************/
+
+void breathCurveMenuPrint() {
+  display.setCursor(4,4) ;
+  display.setTextColor(WHITE) ;
+  display.setTextSize(1) ;   
+  display.print("Breath") ;
+  display.print(" ") ;
+  display.print("Curve") ;
+  
+  for (int i=0; i<4; i++) {
+    switch(menuCursor[BREATH_CURVE][YSCROLL]+i) {
+      case 1:
+        display.setCursor(16,(20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Constant") ;
+      break;
+      case 2:
+        display.setCursor(16,(20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Linear") ;
+      break;
+      case 3:
+        display.setCursor(16,(20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Logarithmic") ;
+        
+        display.setCursor((100-2*sizeOfInt(breathCurveRate[0]+1)), (20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print(breathCurveRate[0]+1) ;
+
+        if ((breathCurveBlinker == 0) && (breathCurveBlinkerState == 3)) {
+          display.fillRect(90, (20+16*i), 20, 9, BLACK) ;
+        }
+      break;
+      case 4:
+        display.setCursor(16,(20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Exponential") ; 
+
+        display.setCursor((100-2*sizeOfInt(breathCurveRate[1]+1)), (20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print(breathCurveRate[1]+1) ;
+
+        if ((breathCurveBlinker == 0) && (breathCurveBlinkerState == 4)) {
+          display.fillRect(90, (20+16*i), 20, 9, BLACK) ;
+        }
+      break;
+      case 5:
+        display.setCursor(16,(20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print("Sinusoidal") ;
+
+        display.setCursor((100-2*sizeOfInt(breathCurveRate[2]+1)), (20+16*i)) ;
+        display.setTextColor(WHITE) ;
+        display.setTextSize(1) ;   
+        display.print(breathCurveRate[2]+1) ;
+
+        if ((breathCurveBlinker == 0) && (breathCurveBlinkerState == 5)) {
+          display.fillRect(90, (20+16*i), 20, 9, BLACK) ;
+        }
+      break;
+    }
+  }
+
+  display.drawRect(13, (17+(menuCursor[BREATH_CURVE][YPOS]-menuCursor[BREATH_CURVE][YSCROLL])*16), 113, 13, WHITE) ;
+  
+  int selectPosition = 21+(breathCurveSelectType+1-menuCursor[BREATH_CURVE][YSCROLL])*16 ;
+  if ((selectPosition < 20) || (selectPosition > 64)) {
+    
+  } else { 
+    display.fillRoundRect(5, selectPosition, 5, 5, 2, WHITE) ;
+  }
+}
+
+/**********************************************************************************************************************************************/
+
+void breathCurveRateControl(uint8_t type) {
+  if ( ((millis() - breathCurveTimer) >= 400) && (breathCurveBlinker == 1) ) {
+    breathCurveBlinker = 0 ;
+    breathCurveTimer = millis() ;
+    menuUpdate = true ;
+  } else if ( ((millis() - breathCurveTimer) >= 200) && (breathCurveBlinker == 0) ) {
+    breathCurveBlinker = 1 ;
+    breathCurveTimer = millis() ;
+    menuUpdate = true ;
+  }
+
+  if (backFunction && backFunctionToggle) {
+    backFunctionToggle = false ;
+    breathCurveBlinkerState = 0 ;
+    breathCurveRate[type] = fram.read8(breathCurveAddress+type+1) ;
+    breathCurveBlinker = 0 ;
+  }  
+  if (selectFunction && selectFunctionToggle) {
+    selectFunctionToggle = false ;
+    breathCurveBlinkerState = 0 ;
+    fram.write8(breathCurveAddress+type+1, breathCurveRate[type]) ;
+    breathCurveBlinker = 0 ;
+  }
+  if (cursorUpToggle && cursorUp) {
+    breathCurveRate[type] ++ ;
+    cursorUpToggle = false ;
+  }
+  if (cursorDownToggle && cursorDown) {
+    breathCurveRate[type] -- ;
+    cursorDownToggle = false ;
+  }
+  breathCurveRate[type] = constrain(breathCurveRate[type], 0, 9) ;
+}
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void mpSelectMenuControl() {
   if (backFunction && backFunctionToggle) {
     backFunctionToggle = false ;
     menuCase = 0 ;
@@ -751,14 +1233,13 @@ void threeMenuControl() {
   menuControl(MP_MODE) ;
   if (selectFunction && selectFunctionToggle) {
     selectFunctionToggle = false ;
-    threeMenuCase = menuCursor[MP_MODE][YPOS] ;  
-  }
-  if (cursorRight && cursorRightToggle) {
-    cursorRightToggle = false ;
-    threeMenuCase = menuCursor[MP_MODE][YPOS] ;  
+    mpSelectMenuCase = menuCursor[MP_MODE][YPOS] ;  
   }
 }
-void threeMenuPrint() {
+
+/**********************************************************************************************************************************************/
+
+void mpSelectMenuPrint() {
   display.setCursor(4,4) ;
   display.setTextColor(WHITE) ;
   display.setTextSize(1) ;   
@@ -792,7 +1273,7 @@ void threeMenuPrint() {
     }
   }
   display.drawRect(1, 17+(menuCursor[MP_MODE][YPOS]-menuCursor[MP_MODE][YSCROLL])*16, 116, 13, WHITE) ;
-  int selectPosition = 20+(threeMenuCase-menuCursor[MP_MODE][YSCROLL])*16 ;
+  int selectPosition = 20+(mpSelectMenuCase-menuCursor[MP_MODE][YSCROLL])*16 ;
   if ((selectPosition < 20) || (selectPosition > 64)) {
     
   } else {
@@ -801,37 +1282,61 @@ void threeMenuPrint() {
   
 }
 
-void fourMenuControl() {
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void harmonizerMenuControl() {
   mpChordAdjusterControl(HARMONIZER) ;
 }
-void fourMenuPrint() {
+
+/**********************************************************************************************************************************************/
+
+void harmonizerMenuPrint() {
   mpChordAdjusterPrint(HARMONIZER) ;
 }
 
-void fiveMenuControl() {
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void rotatorMenuControl() {
   mpChordAdjusterControl(ROTATOR) ;
 }
-void fiveMenuPrint() {
+
+/**********************************************************************************************************************************************/
+
+void rotatorMenuPrint() {
   mpChordAdjusterPrint(ROTATOR) ;
 }
 
-void sixMenuControl() {
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+void presetMenuControl() {
   mpChordAdjusterControl(PRESET) ;
 }
-void sixMenuPrint() {
+
+/**********************************************************************************************************************************************/
+
+void presetMenuPrint() {
   mpChordAdjusterPrint(PRESET) ;
 }
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void sevenMenuControl() {
   if (backFunction && backFunctionToggle) {
     backFunctionToggle = false ;
     menuCase = 0 ;
   }
-  if (cursorLeft && cursorLeftToggle) {
-    cursorLeftToggle = false ;
-    menuCase = 0 ;
-  }
 }
+
+/**********************************************************************************************************************************************/
+
 void sevenMenuPrint() {
   /*display.setCursor(4,4) ;
   display.setTextColor(WHITE) ;
@@ -840,16 +1345,19 @@ void sevenMenuPrint() {
   */  
 }
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
 void eightMenuControl() {
   if (backFunction && backFunctionToggle) {
     backFunctionToggle = false ;
     menuCase = 0 ;
   }
-  if (cursorLeft && cursorLeftToggle) {
-    cursorLeftToggle = false ;
-    menuCase = 0 ;
-  }
 }
+
+/**********************************************************************************************************************************************/
+
 void eightMenuPrint() {
   /*display.setCursor(4,4) ;
   display.setTextColor(WHITE) ;
@@ -857,6 +1365,10 @@ void eightMenuPrint() {
   display.print("Test Title 8") ;  
   */
 }
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void mpChordAdjusterControl(int8_t mpType) {
   switch(mpAdjusterMenuCase) {
@@ -891,6 +1403,9 @@ void mpChordAdjusterControl(int8_t mpType) {
     break;
   }
 }
+
+/**********************************************************************************************************************************************/
+
 void mpChordAdjusterPrint(int8_t mpType) {
   switch(mpAdjusterMenuCase) {
     case 0:
@@ -989,6 +1504,9 @@ void mpChordAdjusterPrint(int8_t mpType) {
   }
 }
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void mpAdjustChordSelectControl(int8_t mpType, int8_t mpAdjustNum) {
   switch(mpAdjustChordSelectCase) {
@@ -1106,6 +1624,8 @@ void mpAdjustChordSelectControl(int8_t mpType, int8_t mpAdjustNum) {
     break;
   }
 }
+
+/**********************************************************************************************************************************************/
 
 void mpAdjustChordSelectPrint(int8_t mpType, int8_t mpAdjustNum) {
   switch(mpAdjustChordSelectCase) {
@@ -1328,6 +1848,9 @@ void mpAdjustChordSelectPrint(int8_t mpType, int8_t mpAdjustNum) {
   }
 }
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void mpAdjustPitchSelectControl(int8_t mpType, int8_t mpAdjustNum, int8_t chordNum) {
   int8_t pitchNum = menuCursor[CHORD_PITCH][ABSVAL]-1 ;  
@@ -1383,6 +1906,8 @@ void mpAdjustPitchSelectControl(int8_t mpType, int8_t mpAdjustNum, int8_t chordN
   
   
 }
+
+/**********************************************************************************************************************************************/
 
 void mpAdjustPitchSelectPrint(int8_t mpType, int8_t mpAdjustNum, int8_t chordNum) {
   display.setCursor(4,4) ;
@@ -1447,6 +1972,36 @@ void mpAdjustPitchSelectPrint(int8_t mpType, int8_t mpAdjustNum, int8_t chordNum
   display.drawRect((menuCursor[CHORD_PITCH][XPOS]-1)*64, 22+((menuCursor[CHORD_PITCH][YPOS]-1)*24), 64, 15, WHITE) ;
 }   
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+
+int sizeOfInt(int number) {
+  int a = abs(number) ;
+  int s = 0 ;
+  
+  if (a >= 10000) {
+    s = 5 ;
+  } else if (a >= 1000) {
+    s = 4 ;
+  } else if (a >= 100) {
+    s = 3 ;
+  } else if (a >= 10) {
+    s = 2 ;
+  } else {
+    s = 1 ;
+  }
+
+  if (number < 0) {
+    s ++ ;
+  }
+
+  return s ;
+}
+
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************************************************************************************************
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 void menuControl(int8_t menuChannel) {
   if (cursorLeft && cursorLeftToggle) {

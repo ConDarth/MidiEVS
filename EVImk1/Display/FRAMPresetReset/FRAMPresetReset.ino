@@ -33,6 +33,12 @@ int8_t harmonizerValues[2][8][4] = { { {0, 4, 7, 0}, //major triad
                                       }
                                     } ;
 
+uint16_t sensorAdjustValues[5][4] = { {1023, 250, 300, 650},    //pressure sensor
+                                     {1023, 250, 300, 650},    //pitchbend up
+                                     {1023, 250, 300, 650},    //pitchbend down
+                                     {1023, 250, 300, 650},    //bite sensor
+                                     {1023, 250, 300, 650} } ; //extra mod
+
 void setup(void) {
   Serial.begin(9600);
   
@@ -52,12 +58,25 @@ void setup(void) {
   for(int i=0; i<2; i++) {
     for(int j=0; j<8; j++) {
       for(int k=0; k<4; k++) {
-        address = 192 + 32*i + 4*j + k ;
+        address = 0xC0 + 32*i + 4*j + k ;
         fram.write8(address, harmonizerValues[i][j][k]) ;
         Serial.print(address) ;
         Serial.print("\t") ;
         Serial.println(harmonizerValues[i][j][k]) ;
       }
+    }
+  }
+  
+  for (int i=0; i<5; i++) {
+    for (int j=0; j<4; j++) {
+      address = 0x20 + 8*i + 2*j ;
+      int8_t data1 = sensorAdjustValues[i][j] & B11111111 ;
+      int8_t data2 = sensorAdjustValues[i][j] >> 8 ;
+      fram.write8(address, data1) ;
+      fram.write8(address+1, data2) ;      
+      Serial.print(address) ;
+      Serial.print("\t") ;
+      Serial.println(sensorAdjustValues[i][j]) ;
     }
   }
   
