@@ -314,8 +314,6 @@ void loop() {
   for (int i=0; i<pitchNum+1; i++) {
       lastPitch[i] = pitch[i] ;
   }
-  lastModeSelector = modeSelector ;
-  lastEqualizer = equalizer ;
 
   //Serial.println(millis() - lastTime) ;
   lastTime = millis() ;
@@ -927,15 +925,16 @@ void updateIndicatorDisplay() {
 
   if (pressureVal == 0) {
     equalizer = 0 ;
-  } else if (pressureVal <= equalizerTHR[0][equalizer]) {
-    if (equalizer == 0) { } else {
-    equalizer -- ;      
+  } else {
+    while (pressureVal <= equalizerTHR[0][equalizer]) {
+      equalizer -- ;      
     }
-  } else if (pressureVal >= equalizerTHR[1][equalizer]) {
-    if (equalizer == 8) { } else {
-    equalizer ++ ;      
+    while (pressureVal >= equalizerTHR[1][equalizer]) {
+      equalizer ++ ;      
     }
   }
+  equalizer = constrain(equalizer, 0, 8) ;
+
     
   if (equalizer != lastEqualizer) {
     if (equalizerToggle) {
@@ -946,6 +945,10 @@ void updateIndicatorDisplay() {
       }
     }
   }
+
+  lastModeSelector = modeSelector ;
+  lastEqualizer = equalizer ;
+  
   writeIndicatorDisplay() ;
 }
 
@@ -1354,7 +1357,7 @@ void midiCommand(int command, int data1, int data2) {
       Serial1.write(command);//send midi command byte
       Serial1.write(data1);//send first data byte
       Serial1.write(data2);//send second data byte
-    break;
+    break ;
   } 
 }
 
