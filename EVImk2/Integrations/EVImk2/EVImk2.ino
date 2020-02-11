@@ -439,10 +439,10 @@ void updatePressure() {
   if (pressureVal != pressureLast) { // need to allow for tolerances to ease mass transfer of data
     switch(pressureOutputState){
       case 0:
-        //output pressure to continuous controller 2
-        midiCommand(176, 2, pressureVal>>7) ;
-        //midiCommand(176, 34, pressureVal>>7) ;
-      break;
+        //output pressure to continuous controller 20
+        midiCommand(176, 20, pressureVal>>7) ;
+        //midiCommand(176, 52, pressureVal>>7) ;
+      break;7
       case 1: 
       //output pressure to something else and so on
       break;

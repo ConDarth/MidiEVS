@@ -7,7 +7,7 @@ Adafruit_MCP4725 dac2 ;
 
 
 uint16_t lowerTHR = 500 ; //both 12 bit numbers to set the thr for pressure
-uint16_t upperTHR = 1000 ;
+uint16_t upperTHR = 2000 ;
 
 boolean interruptState = 0 ;
 
@@ -15,8 +15,8 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
 
-  pinMode(3, OUTPUT) ;
-  digitalWrite(3, HIGH) ; //set to high to allow interrupt, low to disable
+  pinMode(2, OUTPUT) ;
+  digitalWrite(2, HIGH) ; //set to high to allow interrupt, low to disable
   
   dac1.begin(0x62);
   dac2.begin(0x63);
@@ -27,10 +27,10 @@ void setup() {
   dac1.setVoltage(lowerTHR, false);
   dac2.setVoltage(upperTHR, false);
 
-  pinMode(2, INPUT) ;
-  attachInterrupt(2, noteUpdate, CHANGE) ;
+  pinMode(3, INPUT) ;
+  attachInterrupt(3, noteUpdate, CHANGE) ;
 
-  interruptState = digitalRead(2) ;
+  interruptState = digitalRead(3) ;
 
   pinMode(13, OUTPUT) ;
   digitalWrite(13, interruptState) ;
