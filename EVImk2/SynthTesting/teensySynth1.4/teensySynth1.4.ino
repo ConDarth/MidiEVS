@@ -182,15 +182,16 @@ float DIV127 = 1.0 / 127.0 ;
 float DIV100 = 1.0 / 100.0 ;
 float DIV64 = 1.0 / 64.0 ;
 float DIV12 = 1.0 / 12.0 ;
+float DIV3 = 1.0 / 3.0 ;
 
 static byte noteBuff[BUFFER] = {255, 255, 255, 255, 255, 255, 255, 255} ;
 static byte velBuff[BUFFER] = {255, 255, 255, 255, 255, 255, 255, 255} ;
 static byte voiceBuff[BUFFER] = {255, 255, 255, 255, 255, 255, 255, 255} ;
-static byte lastNoteBuff[VOICE_NUM] = {255, 255, 255, 255} ;
+static byte lastNote = 255 ;
 static boolean voiceTally[VOICE_NUM] = {0, 0, 0, 0} ;
 static byte buffSize = 0;
 
-float filterFrequency = 2000 ;
+float filterFrequency = 6000 ;
 float filterEnvelopeAmt = 0 ;
 float portamentoAmt = 0 ;
 boolean portamentoToggle = true ;
@@ -203,7 +204,7 @@ void setup() {
   Serial.begin(9600) ;
 
   
-  AudioMemory(20) ;
+  AudioMemory(30) ;
   usbMIDI.setHandleControlChange(myControlChange);
   usbMIDI.setHandleNoteOff(myNoteOff);
   usbMIDI.setHandleNoteOn(myNoteOn);
@@ -251,30 +252,30 @@ void setup() {
   mixerOsc2Voice4.gain(2, 1.0) ;
   mixerOsc2Voice4.gain(3, 1.0) ;
     
-  osc1Voice1.begin(WAVEFORM_SINE) ; 
+  osc1Voice1.begin(WAVEFORM_SAWTOOTH) ; 
   osc1Voice1.frequencyModulation(DETUNE_RANGE) ;  
-  osc2Voice1.begin(WAVEFORM_SINE) ; 
+  osc2Voice1.begin(WAVEFORM_SAWTOOTH) ; 
   osc2Voice1.frequencyModulation(DETUNE_RANGE) ;  
   noiseVoice1.amplitude(1.0) ;
   filterVoice1.octaveControl(2*FILTER_MOD_RANGE) ;
 
-  osc1Voice2.begin(WAVEFORM_SINE) ; 
+  osc1Voice2.begin(WAVEFORM_SAWTOOTH) ; 
   osc1Voice2.frequencyModulation(DETUNE_RANGE) ;  
-  osc2Voice2.begin(WAVEFORM_SINE) ; 
+  osc2Voice2.begin(WAVEFORM_SAWTOOTH) ; 
   osc2Voice2.frequencyModulation(DETUNE_RANGE) ;  
   noiseVoice2.amplitude(1.0) ;
   filterVoice2.octaveControl(2*FILTER_MOD_RANGE) ;
 
-  osc1Voice3.begin(WAVEFORM_SINE) ; 
+  osc1Voice3.begin(WAVEFORM_SAWTOOTH) ; 
   osc1Voice3.frequencyModulation(DETUNE_RANGE) ;  
-  osc2Voice3.begin(WAVEFORM_SINE) ; 
+  osc2Voice3.begin(WAVEFORM_SAWTOOTH) ; 
   osc2Voice3.frequencyModulation(DETUNE_RANGE) ;  
   noiseVoice3.amplitude(1.0) ;
   filterVoice3.octaveControl(2*FILTER_MOD_RANGE) ;
 
-  osc1Voice4.begin(WAVEFORM_SINE) ; 
+  osc1Voice4.begin(WAVEFORM_SAWTOOTH) ; 
   osc1Voice4.frequencyModulation(DETUNE_RANGE) ;  
-  osc2Voice4.begin(WAVEFORM_SINE) ; 
+  osc2Voice4.begin(WAVEFORM_SAWTOOTH) ; 
   osc2Voice4.frequencyModulation(DETUNE_RANGE) ;  
   noiseVoice4.amplitude(1.0) ;
   filterVoice4.octaveControl(2*FILTER_MOD_RANGE) ;
@@ -386,11 +387,29 @@ void myPitchBend(byte channel, int bend) {
 void myControlChange(byte channel, byte control, byte value) {
   float x ;
   float y ;
+  float z ;
   AudioNoInterrupts() ;
   switch (control) {
     case 5:
-      x = 3000 * value * DIV127 ;
+      x = value * DIV127 ;
+      x = pow(4, x) - 1 ;
+      x = x * DIV3 ;
+      x = 6000 * DIV12 * x ;
       portamentoAmt = x ;
+
+      y = 12 * DETUNE_RANGE * portamentoAmt ;
+      z = y * dcPort1.read() ;
+      dcPort1.amplitude(dcPort1.read()) ;
+      dcPort1.amplitude(0.0, z) ;
+      z = y * dcPort2.read() ;
+      dcPort2.amplitude(dcPort2.read()) ;
+      dcPort2.amplitude(0.0, z) ;
+      z = y * dcPort3.read() ;
+      dcPort3.amplitude(dcPort3.read()) ;
+      dcPort3.amplitude(0.0, z) ;
+      z = y * dcPort4.read() ;
+      dcPort4.amplitude(dcPort4.read()) ;
+      dcPort4.amplitude(0.0, z) ;      
     break;
     case 10: 
       x = value * DIV127 ;
@@ -717,7 +736,8 @@ void myControlChange(byte channel, byte control, byte value) {
     break;
     case 67:
       x = value * DIV127 ;
-      x = pow(2, x) - 1 ;
+      x = pow(4, x) - 1 ;
+      x = x * DIV3 ;
       x = x * 25 ;
       pitchLFO.frequency(x);
     break;
@@ -754,7 +774,8 @@ void myControlChange(byte channel, byte control, byte value) {
     break;
     case 70:
       x = value * DIV127 ;
-      x = pow(2, x) - 1 ;
+      x = pow(4, x) - 1 ;
+      x = x * DIV3 ;
       x = x * 25 ;
       filterLFO.frequency(x);
     break;
@@ -783,7 +804,8 @@ void myControlChange(byte channel, byte control, byte value) {
     break;
     case 73:
       x = value * DIV127 ;
-      x = pow(2, x) - 1 ;
+      x = pow(4, x) - 1 ;
+      x = x * DIV3 ;
       x = x * 25 ;
       ampLFO.frequency(x);
     break;
@@ -815,6 +837,7 @@ void keyBuff(byte note, byte velocity, bool state) {
     for(int i=0; i<VOICE_NUM; i++) {
       if (voiceTally[i] == 0) {
         oscPlay(note, velocity, i);
+        lastNote = note ;
         noteBuff[buffSize] = note;
         velBuff[buffSize] = velocity ;
         voiceBuff[buffSize] = i ;
@@ -828,6 +851,7 @@ void keyBuff(byte note, byte velocity, bool state) {
     for(int i=0; i<buffSize; i++) {
       if(voiceBuff[i] != 255) {
         oscPlay(note, velocity, voiceBuff[i]);
+        lastNote = note ;
         voiceBuff[buffSize] = voiceBuff[i] ;
         voiceBuff[i] = 255 ;
         noteBuff[buffSize] = note;
@@ -846,9 +870,7 @@ void keyBuff(byte note, byte velocity, bool state) {
       if (noteBuff[found] == note) {
         
         oscStop(voiceBuff[found]) ; 
-        if (voiceTally[voiceBuff[found]] == 1) {
-          lastNoteBuff[voiceBuff[found]] = noteBuff[found] ;
-        }
+
         voiceTally[voiceBuff[found]] = 0 ;
         
         if (voiceBuff[0] == 255) {
@@ -857,6 +879,7 @@ void keyBuff(byte note, byte velocity, bool state) {
               for (int j=0; j<VOICE_NUM; j++) {
                 if (voiceTally[j] == 0) {
                   oscPlay(noteBuff[i-1], velBuff[i-1], j);
+                  lastNote = noteBuff[i-1] ;
                   voiceBuff[i-1] = j ;
                   voiceTally[j] = 1 ;
 
@@ -884,22 +907,23 @@ void keyBuff(byte note, byte velocity, bool state) {
   return ;
 }
 
-void oscPlay(byte note, byte velocity, int voice) {
+void oscPlay(int note, int velocity, int voice) {
   float amp ;
   float port ;
+  float amt ;
   amp = (float) velocity * DIV127 ;
   AudioNoInterrupts() ;
   switch(voice) {
     case 0:
-      if ((portamentoToggle) && (envelopeVoice1.isActive()) && (lastNoteBuff[voice] <= 127)) {
-        port = lastNoteBuff[voice] - note ;
+      if ((portamentoToggle) && (lastNote <= 127)) {
+        port = lastNote - note ;
+        amt = abs(port * portamentoAmt) ;
         port = port * DETUNE_CONSTANT * DIV12 ;
         dcPort1.amplitude(port) ;
-        dcPort1.amplitude(0.0, portamentoAmt) ;
-      } else {
-        envelopeVoice1.noteOn() ;
-        envelopeFilter1.noteOn() ;
+        dcPort1.amplitude(0.0, amt) ;
       }
+      envelopeVoice1.noteOn() ;
+      envelopeFilter1.noteOn() ;
       osc1Voice1.frequency(noteFreqs[note]) ;
       osc2Voice1.frequency(noteFreqs[note]) ;
       envelopeVoice1.noteOn() ;
@@ -909,15 +933,15 @@ void oscPlay(byte note, byte velocity, int voice) {
       noiseVoice1.amplitude(amp) ;
     break;
     case 1:
-      if ((portamentoToggle) && (envelopeVoice2.isActive()) && (lastNoteBuff[voice] <= 127)) {
-        port = lastNoteBuff[voice] - note ;
+      if ((portamentoToggle) && (lastNote <= 127)) {
+        port = lastNote - note ;
+        amt = abs(port * portamentoAmt) ;
         port = port * DETUNE_CONSTANT * DIV12 ;
         dcPort2.amplitude(port) ;
-        dcPort2.amplitude(0.0, portamentoAmt) ;
-      } else {
-        envelopeVoice2.noteOn() ;
-        envelopeFilter2.noteOn() ;
+        dcPort2.amplitude(0.0, amt) ;
       }
+      envelopeVoice2.noteOn() ;
+      envelopeFilter2.noteOn() ;
       osc1Voice2.frequency(noteFreqs[note]) ;
       osc2Voice2.frequency(noteFreqs[note]) ;
       osc1Voice2.amplitude(amp) ;
@@ -925,15 +949,15 @@ void oscPlay(byte note, byte velocity, int voice) {
       noiseVoice2.amplitude(amp) ;
     break;
     case 2:
-      if ((portamentoToggle) && (envelopeVoice3.isActive()) && (lastNoteBuff[voice] <= 127)) {
-        port = lastNoteBuff[voice] - note ;
+      if ((portamentoToggle) && (lastNote <= 127)) {
+        port = lastNote - note ;
+        amt = abs(port * portamentoAmt) ;
         port = port * DETUNE_CONSTANT * DIV12 ;
         dcPort3.amplitude(port) ;
-        dcPort3.amplitude(0.0, portamentoAmt) ;
-      } else {
-        envelopeVoice3.noteOn() ;
-        envelopeFilter3.noteOn() ;
+        dcPort3.amplitude(0.0, amt) ;
       }
+      envelopeVoice3.noteOn() ;
+      envelopeFilter3.noteOn() ;
       osc1Voice3.frequency(noteFreqs[note]) ;
       osc2Voice3.frequency(noteFreqs[note]) ;
       osc1Voice3.amplitude(amp) ;
@@ -941,15 +965,15 @@ void oscPlay(byte note, byte velocity, int voice) {
       noiseVoice3.amplitude(amp) ;
     break;
     case 3:
-      if ((portamentoToggle) && (envelopeVoice4.isActive()) && (lastNoteBuff[voice] <= 127)) {
-        port = lastNoteBuff[voice] - note ;
+      if ((portamentoToggle) && (lastNote <= 127)) {
+        port = lastNote - note ;
+        amt = abs(port * portamentoAmt) ;
         port = port * DETUNE_CONSTANT * DIV12 ;
         dcPort4.amplitude(port) ;
-        dcPort4.amplitude(0.0, portamentoAmt) ;
-      } else {
-        envelopeVoice4.noteOn() ;
-        envelopeFilter4.noteOn() ;
+        dcPort4.amplitude(0.0, amt) ;
       }
+      envelopeVoice4.noteOn() ;
+      envelopeFilter4.noteOn() ;
       osc1Voice4.frequency(noteFreqs[note]) ;
       osc2Voice4.frequency(noteFreqs[note]) ;
       osc1Voice4.amplitude(amp) ;

@@ -414,7 +414,7 @@ void updateNote() {
   if ((millis() - midiLastTime) > midiDebounceTime) {
     updatePressure();
     updatePb() ;
-    updatePortamento() ;
+    //updatePortamento() ;
     midiLastTime = millis() ;
   }
   
