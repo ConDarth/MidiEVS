@@ -14,7 +14,5 @@ void loop() {
   usbMIDI.sendNoteOn(note, 0, channel) ;
   delay(1000) ;
   
-  while (usbMIDI.read()) {
-    // ignore incoming messages
-  }
+  
 }
