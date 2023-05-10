@@ -74,7 +74,7 @@ uint8_t velocity = 127 ;
 uint8_t channel = 1 ;
 uint8_t breathControl = 0 ;
 int baseNote = 36 ;
-int keyNote= -2  ;
+int keyNote= 0  ;
 int keyVal[7]             = {   -5,     2,     1,     4,    -3,    -1,    -2} ;  //Adjustments for the valves pressed
 uint16_t keyValMask[7]    = {0x040, 0x004, 0x002, 0x001, 0x020, 0x010, 0x008} ;  //Masks to determine which valves are pressed
 int octaveVal[6]          = {   60,    72,    48,    36,    24,    12} ;         //Adjustments for which octave used
@@ -97,7 +97,7 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(21), touchInterrupt, FALLING) ;
   attachInterrupt(digitalPinToInterrupt(22), pressureInterrupt, CHANGE) ;
-  attachInterrupt(digitalPinToInterrupt(20), pressureInterruptReset, FALLING) ;
+  attachInterrupt(digitalPinToInterrupt(20), keyChangeInterrupt, FALLING) ;
 
 
   pTHRBase = analogRead(14) ;
@@ -256,6 +256,11 @@ void pressureInterrupt() {
 
 void pressureInterruptReset() {
   pressureResetFlag = true ;
+}
+
+void keyChangeInterrupt() {
+  keyNote = (keyNote-1)%(-12) ;
+  noteChangeFlag = true ;
 }
 
 void pressureTimerInterrupt() {
