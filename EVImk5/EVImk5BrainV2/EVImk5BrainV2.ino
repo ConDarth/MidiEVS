@@ -38,6 +38,7 @@ MIDI Wind Synth Transmit Controller
 
 //----------------------------------------Object Definitions----------------------------
 Adafruit_MPR121 cap = Adafruit_MPR121();
+Adafruit_MPR121 cap2 = Adafruit_MPR121();
 Adafruit_seesaw ss = Adafruit_seesaw(&Wire);
 Adafruit_seesaw ssMenu ;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -68,11 +69,28 @@ uint32_t touchReadTime = 10 ;
 uint32_t touchReadTimeStart = 0 ;
 uint32_t encoderMenuReadTime = 50 ;
 uint32_t encoderMenuReadTimeStart = 0 ; 
+uint32_t pitchbendReadTime = 5 ;
+uint32_t pitchbendReadTimeStart = 0 ;
+
 
 //-----------------------------------------Touch Sensor Variables-------------------------------------
 
 uint16_t lasttouched = 0;
 uint16_t currtouched = 0;
+
+//----------------------------------------Pitch Bend Variables----------------------------------------
+const int8_t pbLength = 3 ;
+int8_t pbCase = 0 ;
+uint16_t pbRaw = 0 ;
+
+uint16_t pbLowVal = 0 ;
+uint16_t pbLowArray[pbLength] = {0, 0, 0} ;
+int8_t pbLowCase = 0 ;
+
+uint16_t pbHighVal = 0 ;
+uint16_t pbHighArray[pbLength] = {0, 0, 0} ;
+int8_t pbHighCase = 0 ;
+
 
 //----------------------------------------Encoder Variables-------------------------------------------
 
@@ -381,7 +399,6 @@ int8_t audioOutData = 0b00000001 ;
 
 int8_t audioEQCursor = 0 ;
 int8_t audioEQCursorLast = 0 ;
-int8_t 
 
 int8_t audioPresetCursor = 0 ;
 int8_t audioPresetCursorLast = 0 ;
@@ -482,6 +499,12 @@ if (! ssMenu.begin(SEESAW_MENU_ADDR) ) {
   // Default address is 0x5A, if tied to 3.3V its 0x5B
   // If tied to SDA its 0x5C and if SCL then 0x5D
   if (!cap.begin(0x5A)) {
+    Serial.println("MPR121 not found, check wiring?");
+    while (1);
+  }
+  Serial.println("MPR121 found!");
+
+  if (!cap2.begin(0x5B)) {
     Serial.println("MPR121 not found, check wiring?");
     while (1);
   }
@@ -627,6 +650,33 @@ void updateData(){
         } else if (!encoderSwitch[4] && encoderSwitchTog[4]){
           encoderSwitchTog[4] = 0 ;
         }
+      }
+    }
+
+    if (dataReadTimeStart - pitchbendReadTimeStart >= pitchbendReadTime){
+      switch(pbCase){
+        case 0:
+          //Update a pitchbend low value
+          pbRaw = cap2.filteredData(10) ;       //Get new raw value
+          pbLowVal -= pbLowArray[pbLowCase] ;   //Subtract off last value
+          pbLowVal += pbRaw ;                   //Add in New value
+          pbLowArray[pbLowCase] = pbRaw ;       //Replace the value in the array
+
+          pbCase = 1 ;
+          pbLowCase = (pbLowCase+1)%pbLength ;
+
+          Serial.print(pbLowVal) ; Serial.print("\t") ; Serial.println(pbHighVal) ;
+        break;
+        case 1:
+          //Update pitchbend high value
+          pbRaw = cap2.filteredData(11) ;       //Get new raw value
+          pbHighVal -= pbHighArray[pbHighCase] ;   //Subtract off last value
+          pbHighVal += pbRaw ;                   //Add in New value
+          pbHighArray[pbHighCase] = pbRaw ;       //Replace the value in the array
+
+          pbCase = 0 ;
+          pbHighCase = (pbHighCase+1)%pbLength ;
+        break;
       }
     }
 
