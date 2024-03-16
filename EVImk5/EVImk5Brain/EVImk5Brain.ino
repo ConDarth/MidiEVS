@@ -11,6 +11,7 @@ MIDI Wind Synth Transmit Controller
 #include <Adafruit_SSD1306.h>
 #include "Adafruit_seesaw.h"
 #include <Adafruit_MCP4725.h>
+#include "Adafruit_FRAM_I2C.h"
 
 
 //------------------------------Constant Addresses-----------------------------
@@ -42,6 +43,7 @@ Adafruit_seesaw ssMenu ;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MCP4725 dacLow;
 Adafruit_MCP4725 dacHigh;
+Adafruit_FRAM_I2C fram     = Adafruit_FRAM_I2C();
 
 IntervalTimer dataReadTimer ;
 
@@ -72,7 +74,7 @@ uint16_t currtouched = 0;
 
 int8_t encoderDelta[5]     = {0, 0, 0, 0, 0} ;
 int8_t encoderSwitch[5]    = {0, 0, 0, 0, 0} ;
-bool   encoderSwitchTog[5] = {0, 0, 0, 0, 0} ;
+bool   encoderSwitchTog[5] = {1, 1, 1, 1, 1} ;
 
 //Values for fast breath reading (in Volts)
 float schmittLow  = 0.87 ;
@@ -93,20 +95,33 @@ bool displayUpdateFlag = 0 ;
 
 //                        Col1 Col2 Col3 Col4 Row
 bool menuUpdateFlag[5] = {0,   0,   0,   0,   0} ;
+bool menuDataSwitch[5] = {0,   0,   0,   0,   0} ;
 int8_t menuDataDel[5]  = {0,   0,   0,   0,   0} ;
 int8_t menuDataLast[5] = {0,   0,   0,   0,   0} ;
+
+//What state should the menu be in 
+// 0 - Off
+// 1 - Main Menu
+// 2 - Synth
+// 3 - Audio Settings
+// 4 - Sensor Settings
+// 5 - MIDI Settings
+int8_t menuCase = 0 ;
+
 
 
 int8_t menuCurrRow = 0 ;
 int8_t menuLastRow = 1 ;
-int8_t menuNumRow  = 19 ;
+int8_t menuNumRow  = 20 ;
 
 int8_t menuTopRow  = 0 ;
 int8_t menuBotRow  = 1 ;
 int8_t menuCurrRowPos = 0 ;
 
+int16_t presetLength = 128 ;
 
-int8_t menuDataMin[][4] = { {-40,  0,    0,    -50 },           //VOL
+int8_t menuDataMin[][4] = { {0,    0,    0,    0   },           //MAIN
+                            {-40,  0,    0,    -50 },           //VOL
                             {0,    0,    0,    0   },           //AMP
                             {-111, -111, -111, -111},           //TUN
                             {0,    0,    0,    0   },           //PUL
@@ -126,7 +141,8 @@ int8_t menuDataMin[][4] = { {-40,  0,    0,    -50 },           //VOL
                             {-40,  -40,  -40,  -40 },           //EQM
                             {-40,  -40,  -40,  0   }   } ;      //EQH
 
-int8_t menuDataMax[][4] = { {20,   100,  100,  50  },           //VOL
+int8_t menuDataMax[][4] = { {9,    0,    3,    0   },           //MAIN
+                            {20,   100,  100,  50  },           //VOL
                             {100,  100,  100,  100 },           //AMP
                             {111,  111,  111,  111 },           //TUN
                             {100,  4,    100,  100 },           //PUL
@@ -146,11 +162,12 @@ int8_t menuDataMax[][4] = { {20,   100,  100,  50  },           //VOL
                             {20,   20,   20,   20  },           //EQM
                             {20,   20,   20,   0   }   } ;      //EQH
 
-int8_t menuDataVal[][4] = { {0,    10,   100,  0   },           //VOL
+int8_t menuDataVal[][4] = { {8,    0,    1,    0   },           //MAIN
+                            {0,    10,   100,  0   },           //VOL
                             {0,    100,  0,    0   },           //AMP
                             {0,    0,    0,    0   },           //TUN
                             {50,   0,    0,    0   },           //PUL
-                            {0,    50,   0,    20  },           //FIL
+                            {0,    100,  0,    20  },           //FIL
                             {0,    0,    100,  0   },           //ENV
                             {10,   0,    0,    0   },           //PRT
                             {0,    0,    0,    0   },           //VIB
@@ -160,13 +177,14 @@ int8_t menuDataVal[][4] = { {0,    10,   100,  0   },           //VOL
                             {0,    0,    10,   0   },           //RNG
                             {0,    0,    0,    0   },           //WAV
                             {0,    1,    100,  0   },           //DLY
-                            {0,    0,    0,    0   },           //RVB
+                            {5,    0,    20,   0   },           //RVB
                             {0,    0,    0,    0   },           //FMT
                             {12,   6,    0,    0   },           //EQL
                             {0,    -3,   -6,   -9  },           //EQM
                             {-12,  -18,  -24,  0   }   } ;      //EQH
 
-char menuHeaders[][21]  = { " VOL  MN PRE  BR BAL",             //VOL
+char menuHeaders[][21]  = { "MAIN PRE     OUT    ",             //MAIN
+                            " VOL  MN PRE  BR BAL",             //VOL
                             " AMP PUL SAW SQR TRI",             //AMP
                             " TUN PUL SAW SQR TRI",             //TUN
                             " PUL DTY SHP FRQ AMT",             //PUL
@@ -187,7 +205,8 @@ char menuHeaders[][21]  = { " VOL  MN PRE  BR BAL",             //VOL
                             " EQH  5k 10k 20k    "     } ;      //EQH
 
 //MIDI CC Channels to send to and exceptions to standard sending procedure
-int8_t menuDataCC[][4]  = { {7,    9,    10,   8   },           //VOL
+int8_t menuDataCC[][4]  = { {-1,   -1,   0,    -1  },           //MAIN
+                            {7,    9,    10,   8   },           //VOL
                             {16,   17,   18,   19  },           //AMP
                             {20,   21,   22,   23  },           //TUN
                             {106,  107,  108,  109 },           //PUL
@@ -201,18 +220,19 @@ int8_t menuDataCC[][4]  = { {7,    9,    10,   8   },           //VOL
                             {98,   99,   100,  101 },           //RNG
                             {85,   86,   87,   88  },           //WAV
                             {76,   77,   78,   79  },           //DLY
-                            {102,  103,  104,  0   },           //RVB
-                            {91,   92,   93,   0   },           //FMT
-                            {118,  119,  120,  0   },           //EQL
+                            {102,  103,  104,  -1  },           //RVB
+                            {91,   92,   93,   -1  },           //FMT
+                            {118,  119,  120,  -1  },           //EQL
                             {121,  122,  123,  124 },           //EQM
-                            {125,  126,  127,  0   }   } ;      //EQH
+                            {125,  126,  127,  -1  }   } ;      //EQH
 
 // Types of data to send
 // 0: Standard (7bit unsigned int)
 // 1: Toggle Type (0-Off 64-On)
 // 2: LSB Negative (7bit positive data and 7bit negative data sent on CC+32)
 // 3: Centered negative (Data from -64 to 63 has 64 added to be sent over 7 bits)
-int8_t menuDataCCType[][4] = { {3,    0,    0,    3   },        //VOL
+int8_t menuDataCCType[][4] = { {-1,   -1,    0,   -1   },        //MAIN
+                               {3,    0,    0,    3   },        //VOL
                                {0,    0,    0,    0   },        //AMP
                                {2,    2,    2,    2   },        //TUN
                                {0,    0,    0,    0   },        //PUL
@@ -226,11 +246,11 @@ int8_t menuDataCCType[][4] = { {3,    0,    0,    3   },        //VOL
                                {3,    0,    0,    0   },        //RNG
                                {0,    0,    0,    0   },        //WAV
                                {0,    0,    0,    0   },        //DLY
-                               {0,    0,    0,    0,  },        //RVB
-                               {0,    0,    0,    0,  },        //FMT
-                               {3,    3,    3,    0,  },        //EQL
-                               {3,    3,    3,    3,  },        //EQM
-                               {3,    3,    3,    0,  }   } ;   //EQH
+                               {0,    0,    0,    -1  },        //RVB
+                               {0,    0,    0,    -1  },        //FMT
+                               {3,    3,    3,    -1  },        //EQL
+                               {3,    3,    3,    3   },        //EQM
+                               {3,    3,    3,    -1  }   } ;   //EQH
 
 //Types of Exceptions to Print
 //Used for Data without Exceptions
@@ -254,16 +274,28 @@ char const* linkExcChar[4]    = {" OFF","  BR"," EXP"," MOD"} ;
 //Expression for waveform shape exceptions
 int8_t waveExc[5]             = {     0,     1,     2,     3,     4} ;
 char const* waveExcChar[5]    = {" SIN"," SAW"," SQR"," TRI"," S&H"} ;
-int8_t ampExc[21]             = {   100,   101,   102,   103,   104,   105,   106,   107,   108,   109,   110,   111,   112,   113,   114,   115,   116,   117,   118,   119,   120} ;
-char const* ampExcChar[21]    = {" 1.0"," 1.1"," 1.2"," 1.3"," 1.4"," 1.5"," 1.6"," 1.7"," 1.8"," 1.9"," 2.0"," 2.1"," 2.2"," 2.3"," 2.4"," 2.5"," 2.6"," 2.7"," 2.8"," 2.9"," 3.0"} ;
+//Exceptions for vowel formant type
 int8_t sexExc[3]              = {     0,     1,     2} ;
-char const* sexExcChar[3]         = {"   M","   W","  Ch"} ;
+char const* sexExcChar[3]     = {"   M","   W","  Ch"} ;
+//Vowels
 int8_t vowelExc[10]           = {     0,     1,     2,     3,     4,     5,     6,     7,     8,     9} ;
 char const*vowelExcChar[10]   = {"   i","   I","   e","  ae","   a","  uh","   u","  oo","  ow","  er"} ;
+//Preset Names
+int8_t presetExc[10]          = {     0,     1,     2,     3,     4,     5,     6,     7,     8,     9} ;
+char const* presetExcChar[10] = {"USR1","USR2","USR3","USR4","USR5","USR6","USR7","USR8"," EVI","TRPT"} ;
+//Audio Out
+int8_t audioExc[4]            = {     0,     1,     2,     3} ;
+char const* audioExcChar[4]   = {" OFF"," SPK"," LNE"," BTH"} ;
+//Set the current values to usr preset
+int8_t setExc[1]              = {     0} ;
+char const* setExcChar[1]     = {" SET"} ;
+int8_t backExc[1]             = {     0} ;
+char const* backExcChar[1]    = {" BCK"} ;
 
 
 //Storing all the exceptions to printing raw numbers
-int8_t menuExcSize[][4]       = { {0,             0,             0,             0             },          //VOL
+int8_t menuExcSize[][4]       = { {10,            1,             4,             1             },          //MAIN
+                                  {0,             0,             0,             0             },          //VOL
                                   {0,             0,             0,             0             },          //AMP
                                   {24,            24,            24,            24            },          //TUN
                                   {0,             5,             0,             0             },          //PUL
@@ -283,7 +315,8 @@ int8_t menuExcSize[][4]       = { {0,             0,             0,             
                                   {0,             0,             0,             0             },          //EQM
                                   {0,             0,             0,             1             } } ;       //EQH
 
-int8_t* menuExcVal[][4]       = { {nullExc,       nullExc,       nullExc,       nullExc       },          //VOL
+int8_t* menuExcVal[][4]       = { {presetExc,     setExc,        audioExc,      backExc       },          //MAIN
+                                  {nullExc,       nullExc,       nullExc,       nullExc       },          //VOL
                                   {nullExc,       nullExc,       nullExc,       nullExc       },          //AMP
                                   {tuningExc,     tuningExc,     tuningExc,     tuningExc     },          //TUN
                                   {nullExc,       waveExc,       nullExc,       nullExc       },          //PUL
@@ -304,7 +337,8 @@ int8_t* menuExcVal[][4]       = { {nullExc,       nullExc,       nullExc,       
                                   {nullExc,       nullExc,       nullExc,       emptyExc      } } ;       //EQH
 
 
-const char** menuExcChar[][4] = { {nullExcChar,   nullExcChar,   nullExcChar,   nullExcChar   },          //VOL
+const char** menuExcChar[][4] = { {presetExcChar, setExcChar,    audioExcChar,  backExcChar   },          //MAIN
+                                  {nullExcChar,   nullExcChar,   nullExcChar,   nullExcChar   },          //VOL
                                   {nullExcChar,   nullExcChar,   nullExcChar,   nullExcChar   },          //AMP
                                   {tuningExcChar, tuningExcChar, tuningExcChar, tuningExcChar },          //TUN
                                   {nullExcChar,   waveExcChar,   nullExcChar,   nullExcChar   },          //PUL
@@ -354,6 +388,15 @@ void setup() {
   Serial.begin(115200);
   MIDI.begin() ;
   Serial1.begin(1000000) ;
+
+//FRAM Setup for preset storage
+if (fram.begin()) {  // you can stick the new i2c addr in here, e.g. begin(0x51);
+  Serial.println("Found I2C FRAM");
+} else {
+  Serial.println("I2C FRAM not identified ... check your connections?\r\n");
+  Serial.println("Will continue in case this processor doesn't support repeated start\r\n");
+  while (1);
+}
 
 
 //------------------------------OLED DISPLAY Setup-----------------------------
@@ -430,6 +473,13 @@ if (! ssMenu.begin(SEESAW_MENU_ADDR) ) {
   }
   Serial.println("MPR121 found!");
 
+if (!cap.begin(0x5B)) {
+    Serial.println("MPR121 not found, check wiring?");
+    while (1);
+  }
+  Serial.println("MPR121 found!");
+
+
 //Custom Schmitt Trigger Setup
 dacLow.begin(0x62) ;
 dacHigh.begin(0x63) ;
@@ -445,7 +495,6 @@ dacHigh.setVoltage(voltageToDAC(schmittHigh), false) ;
   
 
 //-------------------------------------User Code-------------------------------
-  printMenuAll() ;
 }
 
 /******************************************************************************
@@ -521,23 +570,32 @@ void updateData(){
     }
 
     if (encoderReadFlag){
-      Serial.println("Read Quad Encoder") ;
       if (dataReadTimeStart - encoderReadTimeStart >= encoderReadTime){
+        Serial.println("Read Quad Encoder") ;
         encoderReadFlag = 0 ;
-        for (int8_t i=0; i<4; i++) {
-          //Get the change in encoder position to be used in menuUpdate
-          encoderDelta[i] = ss.getEncoderDelta(i) ;
 
-          menuDataDel[i] = encoderDelta[i] ;
-          if (menuDataDel[i] != 0){
-            menuUpdateFlag[i] = 1 ;
-          }
-        }
         encoderSwitch[0] = ss.digitalRead(SS_ENC0_SWITCH) ;
         encoderSwitch[1] = ss.digitalRead(SS_ENC1_SWITCH) ;
         encoderSwitch[2] = ss.digitalRead(SS_ENC2_SWITCH) ;
         encoderSwitch[3] = ss.digitalRead(SS_ENC3_SWITCH) ;
 
+        for (int8_t i=0; i<4; i++) {
+          //Get the change in encoder position to be used in menuUpdate
+          encoderDelta[i] = ss.getEncoderDelta(i) ;
+          menuDataDel[i] = encoderDelta[i] ;
+
+          if (menuDataDel[i] != 0){
+            menuUpdateFlag[i] = 1 ;
+          }
+
+          if (encoderSwitch[i] && !encoderSwitchTog[i]){
+            menuDataSwitch[i] = 1 ;
+            menuUpdateFlag[i] = 1 ;
+            encoderSwitchTog[i] = 1 ;
+          } else if (!encoderSwitch[i] && encoderSwitchTog[i]){
+            encoderSwitchTog[i] = 0 ;
+          }
+        }
 
       }
     }
@@ -553,6 +611,14 @@ void updateData(){
         if (menuDataDel[4] != 0){
           menuUpdateFlag[4] = 1 ;
         }
+
+        if (encoderSwitch[4] && !encoderSwitchTog[4]){
+          menuDataSwitch[4] = 1 ;
+          menuUpdateFlag[4] = 1 ;
+          encoderSwitchTog[4] = 1 ;
+        } else if (!encoderSwitch[4] && encoderSwitchTog[4]){
+          encoderSwitchTog[4] = 0 ;
+        }
       }
     }
 
@@ -560,6 +626,21 @@ void updateData(){
 }
 
 void updateMenu(){
+
+  switch(){
+    case 0:  //Off
+    break;
+    case 1:  //Main menu
+    break;
+    case 2:  //Synth Menu
+    break;
+    case 3:  //Audio Settings
+    break;
+    case 4:  //Sensor Settings
+    break;
+    case 5:  //MIDI Settings
+    break;
+  }
 
   if (menuUpdateFlag[4]){
     menuUpdateFlag[4] = 0 ;
@@ -600,6 +681,45 @@ void updateMenu(){
         //Send MIDI Data of updated value
         updateCC(menuCurrRow, i) ;
       }
+
+      if (menuDataSwitch[i]){
+        menuDataSwitch[i] = 0 ;
+        //Special cases if the switch buttons are pressed
+        switch (menuCurrRow) {
+          case 0:
+            //This menu row has the most select functionality
+            if (i == 0){
+              //This loads a new preset and sends it to the controller
+              Serial.println("Read Preset to Synth") ;
+              int8_t preset = menuDataVal[0][0] ;
+              for (int8_t i=0; i<menuNumRow; i++){
+                for (int8_t j=0; j<4; j++){
+                  menuDataVal[i][j] = fram.read(presetLength*preset + 4*i + j) ;
+                  updateCC(i, j) ;
+                }
+              }
+              //
+            } else if (i == 1){
+              //Try and set a new preset if on a user preset
+              
+              Serial.println("Write Preset to FRAM") ;
+              int8_t preset = menuDataVal[0][0] ;
+              if (preset < 8){
+                for (int8_t i=0; i<menuNumRow; i++){
+                  for (int8_t j=0; j<4; j++){
+                    fram.write(presetLength*preset + 4*i + j, menuDataVal[i][j]) ;
+                  }
+                }
+              }
+              //Reprint the screen since data changed
+              printMenuAll() ;
+              //
+            }
+          break;
+        }
+      }
+
+
     }
   }
 
@@ -642,12 +762,18 @@ void updateCC(int8_t _row, int8_t _col) {
       //Send +/- Signals with -63/+64 range
       MIDI.sendControlChange(menuDataCC[_row][_col], menuDataVal[_row][_col]+64, 1) ;
       usbMIDI.sendControlChange(menuDataCC[_row][_col], menuDataVal[_row][_col]+64, 1) ;
+    break;
+    case -1:
+      //dont send anything in this case
+    break;
   }
 
+  /* Print What CC is sent
   Serial.print("CC Channel: ") ;
   Serial.print(menuDataCC[_row][_col]) ;
   Serial.print("\t Value: ") ;
   Serial.println(menuDataVal[_row][_col]) ;
+  */
 
 }
 
@@ -797,7 +923,7 @@ MIDI CC Table
 /*
 Num   | Standard                              | Personal
 ------------------------------------------------------------------------------
-0	    | Bank Select	                          | 
+0	    | Bank Select	                          | OUT
 1	    | Modulation Wheel	                    | MOD 
 2	    | Breath Controller	                    | BR
 3	    | Undefined	                            | RTP

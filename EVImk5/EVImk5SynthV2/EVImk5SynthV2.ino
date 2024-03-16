@@ -1,8 +1,11 @@
-#include <Audio.h>
+#include "AudioStream.h"
+
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
 #include <SerialFlash.h>
+#include <Audio.h>
+
 
 // GUItool: begin automatically generated code
 AudioMixer4              VibratoLink;        //xy=202.78559112548828,558.8426055908203
@@ -458,10 +461,14 @@ int8_t breathLSB = 0 ;
 int8_t breathMSB = 0 ;
 float breathLevel = 0 ;
 
+//Audio Out 
+bool speakerFlag = 1 ;
+bool lineOutFlag = 0 ;
+
 void setup() {
   Serial.begin(115200) ;
 
-  AudioMemory(400) ;
+  AudioMemory(800) ;
 
   MIDI.begin() ;
   Serial1.begin(1000000) ;
@@ -480,8 +487,8 @@ void setup() {
   VolumePreAmpDC.amplitude(preampVolume) ;
 
   //Volume Settings
-  LineLeftAmp.gain( volumeAmount(volume - balanceVolume) ) ;
-  LineRightAmp.gain( volumeAmount(volume + balanceVolume) ) ;
+  LineLeftAmp.gain( 0 ) ;
+  LineRightAmp.gain( 0 ) ;
   SpeakerAmp.gain( volumeAmount(volume) ) ;
   Amp.gain(1) ;
 
@@ -613,14 +620,14 @@ void setup() {
   DelayFilter.frequency(5000) ;
 
   //Setup for Freeverb
-  Freeverb.roomsize(0) ;
+  Freeverb.roomsize(0.05) ;
   Freeverb.damping(0) ;
-  FreeverbMixLeft.gain(0, 0) ;
-  FreeverbMixLeft.gain(1, 1) ;
+  FreeverbMixLeft.gain(0, 0.2) ;
+  FreeverbMixLeft.gain(1, 0.8) ;
   FreeverbMixLeft.gain(2, 0) ;
   FreeverbMixLeft.gain(3, 0) ;
-  FreeverbMixRight.gain(0, 0) ;
-  FreeverbMixRight.gain(1, 1) ;
+  FreeverbMixRight.gain(0, 0.2) ;
+  FreeverbMixRight.gain(1, 0.8) ;
   FreeverbMixRight.gain(2, 0) ;
   FreeverbMixRight.gain(3, 0) ;
 
@@ -663,7 +670,6 @@ void setup() {
   FormantMix.gain(2, 0) ;
   FormantMix.gain(3, 0) ;
 
-
 }
 
 void loop() {
@@ -678,11 +684,31 @@ void myControlChange(byte channel, byte control, byte value){
   float amt = value ;
   float rescale = 1 ;
   switch(control){
+    case 0:
+    //Change the audio output type
+    speakerFlag = value & 1 ;
+    lineOutFlag = (value >> 1) & 1 ;
+
+    if (lineOutFlag){
+      LineLeftAmp.gain( volumeAmount(volume - balanceVolume) ) ;
+      LineRightAmp.gain( volumeAmount(volume + balanceVolume) ) ;
+    } else {
+      LineLeftAmp.gain( 0 ) ;
+      LineRightAmp.gain( 0 ) ;
+    }
+      
+    if (speakerFlag){
+      SpeakerAmp.gain( volumeAmount(volume) ) ;
+    } else {
+      SpeakerAmp.gain( 0 ) ;
+    }
+
+    break;
     case 2:
+      //Breath Control
       breathMSB = value ;
       breathLevel = breathAmount(breathMSB, breathLSB) ;
       Breath.amplitude( breathLevel ) ;
-      Serial.println(breathLevel) ;
     break;
     case 5:
       portamentoTime = value ;
@@ -695,17 +721,25 @@ void myControlChange(byte channel, byte control, byte value){
     case 7:
       //Control Main Volume
       volume = amt - 64 ;
-      LineLeftAmp.gain( volumeAmount(volume - balanceVolume) ) ;
-      LineRightAmp.gain( volumeAmount(volume + balanceVolume) ) ;
 
-      SpeakerAmp.gain( volumeAmount(volume) ) ;
+      if (lineOutFlag){
+        LineLeftAmp.gain( volumeAmount(volume - balanceVolume) ) ;
+        LineRightAmp.gain( volumeAmount(volume + balanceVolume) ) ;
+      }
+      
+      if (speakerFlag){
+        SpeakerAmp.gain( volumeAmount(volume) ) ;
+      }
+      
       
     break;
     case 8:
       //Control Left Right Balance
       balanceVolume = (amt-64)/64 ;
-      LineLeftAmp.gain( volumeAmount(volume - balanceVolume) ) ;
-      LineRightAmp.gain(volumeAmount(volume + balanceVolume)) ;
+      if (lineOutFlag){
+        LineLeftAmp.gain( volumeAmount(volume - balanceVolume) ) ;
+        LineRightAmp.gain( volumeAmount(volume + balanceVolume) ) ;
+      }
     break;
     case 9:
       //Control Preamp Volume (CLOSE TO 1 CAN CAUSE CLIPPING)
