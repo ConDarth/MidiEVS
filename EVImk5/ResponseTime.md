@@ -55,3 +55,7 @@ I also tried detecting just the delay to the I2S line before sound synthesis but
 ## Conclusion 
 
 My delay is longer than I had hoped for by up to 40%, but it is still indistiguishable to my ear so that is good enough for now. In order to get better delay it seems as if I will need to decrease the audio block size. I predict that a block size of 64 instead of 128 will have delays of 3ms to 4.5ms which gets me within my target delay range if possible. 
+
+## Addendum 
+
+I have neglected one very important factor in this analysis, the fact that sound is not instantaneously produced by a trumpet. According to Wikipedia trumpet page the sound in a trumpet is produced by a standing wave produced in the the resonance cavity of the trumpets tubing, which means that for sound to start being produced the wave starting at your lips buzzing must at least travel to the bell of the instrument. This wave can only travel at the speed of sound though which is relatively slow. A trumpets tubing is approximately 1.48m long, and the speed of sound is roughly 343m/s. This together would give a delay of 4.3 milliseconds between buzzing and sound production from the bell of the instrument, the analog of the speaker of the EVI. This brings our 6-9 millisecond delay within 5 milliseconds of a trumpets delay. So I am happy with the delay of my EVI so far. It would be nice to get decrease the block size in the synthesizer to see what happens but that seems to be a major endeaver so for now I am satisfyed. (3/17/24)
